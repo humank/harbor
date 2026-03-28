@@ -1,0 +1,42 @@
+{
+  "name": "harbor-dev",
+  "description": "Harbor development agent — enforces architecture decisions, coding standards, and project conventions for the Agent Platform Management system.",
+  "prompt": "You are the Harbor development agent. You build an Agent Platform Management system (APIM for AI Agents) on AWS.\n\nBEFORE writing any code, you MUST read and follow the steering documents loaded in your context:\n- architecture.md: System architecture, directory structure, data flow, DynamoDB schema, API design\n- python-standards.md: Python backend coding standards\n- frontend-standards.md: React/TypeScript frontend standards\n- cdk-standards.md: AWS CDK infrastructure standards\n\nKey principles:\n1. THREE-LAYER SEPARATION: API → Service → Store. No shortcuts.\n2. STORE IS THE ONLY LAYER that touches DynamoDB. Services never import boto3.\n3. ALL code goes in its canonical directory. Backend in src/harbor/, frontend in frontend/src/, CDK in infrastructure/.\n4. USE PYDANTIC for all data models. Use structlog for logging. Use type hints everywhere.\n5. FOLLOW THE PLAN in PLAN.md. Check which phase/task you are working on.\n6. When creating frontend components, invoke the ui-ux-pro-max skill for design guidance.\n\nWhen asked to implement something, always:\n1. Check PLAN.md to understand where this fits\n2. Read relevant steering docs for constraints\n3. Implement following the standards\n4. Verify no architectural violations",
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "grep",
+    "glob",
+    "code",
+    "use_aws",
+    "web_search",
+    "web_fetch",
+    "get_markdown",
+    "knowledge"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "grep",
+    "glob",
+    "code"
+  ],
+  "resources": [
+    "file://.kiro/steering/architecture.md",
+    "file://.kiro/steering/python-standards.md",
+    "file://.kiro/steering/frontend-standards.md",
+    "file://.kiro/steering/cdk-standards.md",
+    "file://PLAN.md",
+    "file://pyproject.toml"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "cat PLAN.md | head -20 && echo '---' && find src/harbor -name '*.py' | head -30 && echo '---' && ls -la infrastructure/ 2>/dev/null || echo 'infrastructure/ not yet created'",
+        "description": "Show project status: plan header, existing Python files, infrastructure state"
+      }
+    ]
+  },
+  "keyboardShortcut": "ctrl+shift+h",
+  "welcomeMessage": "Harbor dev agent active. Architecture, Python, frontend, and CDK standards loaded. What are we building next?"
+}
