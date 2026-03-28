@@ -34,7 +34,7 @@ export default function AuditLog() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <FileText className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold text-primary">Audit Log</h1>
+        <h1 className="font-heading text-2xl font-bold text-text">Audit Log</h1>
       </div>
 
       <Input
@@ -46,27 +46,27 @@ export default function AuditLog() {
       {loading ? (
         <p className="text-sm text-text-muted">Loading audit entries…</p>
       ) : sorted.length === 0 ? (
-        <Card className="text-center text-text-muted py-12">No audit entries found.</Card>
+        <Card className="py-12 text-center text-text-muted">No audit entries found.</Card>
       ) : (
         <Card className="overflow-x-auto p-0">
-          <table className="w-full text-sm text-left">
-            <thead className="border-b border-border bg-bg-hover text-text-muted">
-              <tr>
-                <th className="px-4 py-3 font-medium">Timestamp</th>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-bg-hover text-text-muted">
+                <th className="rounded-tl-xl px-4 py-3 font-medium">Timestamp</th>
                 <th className="px-4 py-3 font-medium">Agent</th>
                 <th className="px-4 py-3 font-medium">Action</th>
                 <th className="px-4 py-3 font-medium">Actor</th>
-                <th className="px-4 py-3 font-medium">Details</th>
+                <th className="rounded-tr-xl px-4 py-3 font-medium">Details</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {sorted.map((e, i) => (
-                <tr key={`${e.timestamp}-${e.agent_id}-${i}`} className="bg-bg-card transition-colors duration-200 hover:bg-bg-hover">
-                  <td className="px-4 py-3 whitespace-nowrap text-text-muted">{formatTs(e.timestamp)}</td>
+                <tr key={`${e.timestamp}-${e.agent_id}-${i}`} className="border-b border-border transition-colors duration-200 hover:bg-bg-hover">
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-text-muted">{formatTs(e.timestamp)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-text">{e.agent_id}</td>
                   <td className="px-4 py-3"><Badge label={e.action} /></td>
                   <td className="px-4 py-3 text-text">{e.actor}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-text-muted max-w-xs truncate">{truncate(e.details)}</td>
+                  <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-text-muted">{truncate(e.details)}</td>
                 </tr>
               ))}
             </tbody>

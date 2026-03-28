@@ -70,7 +70,7 @@ export default function Discovery() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-primary">Discovery</h1>
+      <h1 className="font-heading text-2xl font-bold text-text">Discovery</h1>
 
       <Card>
         <div className="space-y-4">
@@ -82,9 +82,9 @@ export default function Discovery() {
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 ${
+                  className={`cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
                     mode === m
-                      ? 'bg-primary/10 text-primary'
+                      ? 'bg-primary text-white'
                       : 'text-text-muted hover:bg-bg-hover'
                   }`}
                 >
@@ -116,7 +116,7 @@ export default function Discovery() {
       </Card>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
           {error}
         </div>
       )}
@@ -136,18 +136,18 @@ export default function Discovery() {
               <Card
                 key={agent.agent_id}
                 hover
-                className={isResolved ? 'ring-2 ring-primary border-primary' : ''}
+                className={isResolved ? 'ring-2 ring-primary shadow-lg' : ''}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-text">{agent.name}</span>
+                      <span className="font-heading font-semibold text-text">{agent.name}</span>
                       <Badge label={agent.lifecycle_status} />
                       {isResolved && <Badge label="best match" />}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {agent.capabilities.map(c => (
-                        <span key={c} className="rounded bg-cta/20 px-2 py-0.5 text-xs text-cta">{c}</span>
+                        <span key={c} className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">{c}</span>
                       ))}
                     </div>
                   </div>

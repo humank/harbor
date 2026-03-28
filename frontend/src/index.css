@@ -1,23 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --color-primary: #F59E0B;
-  --color-secondary: #FBBF24;
-  --color-cta: #8B5CF6;
-  --color-bg: #0F172A;
-  --color-bg-card: #1E293B;
-  --color-bg-hover: #334155;
-  --color-text: #F8FAFC;
-  --color-text-muted: #94A3B8;
-  --color-border: #334155;
+  --font-sans: 'Open Sans', system-ui, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --color-primary: #2563EB;
+  --color-primary-light: #DBEAFE;
+  --color-secondary: #3B82F6;
+  --color-cta: #F97316;
+  --color-bg: #F8FAFC;
+  --color-bg-card: #FFFFFF;
+  --color-bg-hover: #F1F5F9;
+  --color-text: #1E293B;
+  --color-text-muted: #64748B;
+  --color-border: #E2E8F0;
+  --color-shadow: rgba(15, 23, 42, 0.06);
+  --color-shadow-lg: rgba(15, 23, 42, 0.1);
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
 }
 
 @media (prefers-reduced-motion: reduce) {

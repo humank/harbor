@@ -1,18 +1,18 @@
 const colors: Record<string, string> = {
-  draft: 'bg-slate-700 text-slate-300',
-  submitted: 'bg-amber-900/50 text-amber-400',
-  in_review: 'bg-blue-900/50 text-blue-400',
-  approved: 'bg-emerald-900/50 text-emerald-400',
-  published: 'bg-green-900/50 text-green-400',
-  suspended: 'bg-red-900/50 text-red-400',
-  deprecated: 'bg-orange-900/50 text-orange-400',
-  retired: 'bg-slate-800 text-slate-500',
-  healthy: 'bg-green-900/50 text-green-400',
-  unhealthy: 'bg-red-900/50 text-red-400',
-  unknown: 'bg-slate-700 text-slate-400',
+  draft: 'bg-slate-100 text-slate-600',
+  submitted: 'bg-amber-50 text-amber-700',
+  in_review: 'bg-blue-50 text-blue-700',
+  approved: 'bg-emerald-50 text-emerald-700',
+  published: 'bg-green-50 text-green-700',
+  suspended: 'bg-red-50 text-red-700',
+  deprecated: 'bg-orange-50 text-orange-700',
+  retired: 'bg-slate-100 text-slate-400',
+  healthy: 'bg-green-50 text-green-700',
+  unhealthy: 'bg-red-50 text-red-700',
+  unknown: 'bg-slate-100 text-slate-500',
 }
 
 export function Badge({ label, className = '' }: { label: string; className?: string }) {
-  const color = colors[label] || 'bg-slate-700 text-slate-300'
-  return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${color} ${className}`}>{label}</span>
+  const color = colors[label] || 'bg-slate-100 text-slate-600'
+  return <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-semibold ${color} ${className}`}>{label}</span>
 }

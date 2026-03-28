@@ -35,7 +35,7 @@ export default function AgentCatalog() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text">Agent Catalog</h1>
+      <h1 className="font-heading text-2xl font-bold text-text">Agent Catalog</h1>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
@@ -52,10 +52,10 @@ export default function AgentCatalog() {
             <button
               key={f.label}
               onClick={() => setLifecycle(f.value)}
-              className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 ${
+              className={`cursor-pointer rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
                 lifecycle === f.value
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-text-muted hover:text-text'
+                  ? 'bg-primary text-white shadow-sm shadow-primary/20'
+                  : 'text-text-muted hover:bg-bg-hover hover:text-text'
               }`}
             >
               {f.label}
@@ -64,31 +64,28 @@ export default function AgentCatalog() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {loading ? (
         <p className="text-sm text-text-muted">Loading agents…</p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-text-muted">No agents found.</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((agent) => (
             <Link key={agent.agent_id} to={`/agents/${agent.agent_id}`} className="cursor-pointer">
               <Card hover className="h-full">
                 <div className="flex items-start justify-between gap-2">
-                  <h2 className="text-base font-semibold text-text">{agent.name}</h2>
+                  <h2 className="font-heading text-base font-semibold text-text">{agent.name}</h2>
                   <Badge label={agent.lifecycle_status} />
                 </div>
                 {agent.description && (
-                  <p className="mt-1 line-clamp-2 text-sm text-text-muted">{agent.description}</p>
+                  <p className="mt-1.5 line-clamp-2 text-sm text-text-muted">{agent.description}</p>
                 )}
                 {agent.capabilities.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {agent.capabilities.map((cap) => (
-                      <span
-                        key={cap}
-                        className="rounded bg-cta/20 px-2 py-0.5 text-xs text-cta"
-                      >
+                      <span key={cap} className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
                         {cap}
                       </span>
                     ))}
