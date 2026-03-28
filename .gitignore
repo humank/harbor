@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 .venv/
@@ -11,3 +12,19 @@ build/
 htmlcov/
 .DS_Store
 uv.lock
+
+# CDK
+infrastructure/node_modules/
+infrastructure/dist/
+infrastructure/cdk.out/
+infrastructure/**/*.js
+infrastructure/**/*.d.ts
+!infrastructure/jest.config.js
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Environment
+.env.local
+.env.production

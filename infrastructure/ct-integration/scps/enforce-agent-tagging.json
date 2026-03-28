@@ -1,0 +1,95 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyLambdaCreateWithoutHarborTags",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "aws:RequestTag/harbor-agent": "true",
+          "aws:RequestTag/harbor-tenant-id": "true",
+          "aws:RequestTag/harbor-environment": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyECSCreateWithoutHarborTags",
+      "Effect": "Deny",
+      "Action": [
+        "ecs:CreateService",
+        "ecs:RunTask",
+        "ecs:RegisterTaskDefinition",
+        "ecs:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "aws:RequestTag/harbor-agent": "true",
+          "aws:RequestTag/harbor-tenant-id": "true",
+          "aws:RequestTag/harbor-environment": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyBedrockAgentCreateWithoutHarborTags",
+      "Effect": "Deny",
+      "Action": [
+        "bedrock:CreateAgent",
+        "bedrock:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "aws:RequestTag/harbor-agent": "true",
+          "aws:RequestTag/harbor-tenant-id": "true",
+          "aws:RequestTag/harbor-environment": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyInvalidHarborAgentTagValue",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:TagResource",
+        "ecs:CreateService",
+        "ecs:RunTask",
+        "ecs:RegisterTaskDefinition",
+        "ecs:TagResource",
+        "bedrock:CreateAgent",
+        "bedrock:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:RequestTag/harbor-agent": ["true", "false"]
+        }
+      }
+    },
+    {
+      "Sid": "DenyInvalidHarborEnvironmentTagValue",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:TagResource",
+        "ecs:CreateService",
+        "ecs:RunTask",
+        "ecs:RegisterTaskDefinition",
+        "ecs:TagResource",
+        "bedrock:CreateAgent",
+        "bedrock:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:RequestTag/harbor-environment": ["dev", "staging", "prod"]
+        }
+      }
+    }
+  ]
+}

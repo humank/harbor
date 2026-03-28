@@ -1,0 +1,152 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyDynamoDBModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "dynamodb:DeleteTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:DeleteItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:BatchWriteItem"
+      ],
+      "Resource": "arn:aws:dynamodb:*:HARBOR_ACCOUNT_ID:table/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyLambdaModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:DeleteFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:AddPermission",
+        "lambda:RemovePermission"
+      ],
+      "Resource": "arn:aws:lambda:*:HARBOR_ACCOUNT_ID:function:*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyApiGatewayModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "apigateway:DELETE",
+        "apigateway:PATCH",
+        "apigateway:PUT"
+      ],
+      "Resource": "arn:aws:apigateway:*::/apis/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyS3ModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:DeleteObject",
+        "s3:PutBucketPolicy",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::harbor-*",
+        "arn:aws:s3:::harbor-*/*"
+      ],
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyCloudFrontModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:DeleteDistribution",
+        "cloudfront:UpdateDistribution"
+      ],
+      "Resource": "arn:aws:cloudfront::HARBOR_ACCOUNT_ID:distribution/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyCognitoModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:DeleteUserPoolClient"
+      ],
+      "Resource": "arn:aws:cognito-idp:*:HARBOR_ACCOUNT_ID:userpool/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyEventBridgeModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "events:DeleteRule",
+        "events:DisableRule",
+        "events:PutRule",
+        "events:PutTargets",
+        "events:RemoveTargets"
+      ],
+      "Resource": "arn:aws:events:*:HARBOR_ACCOUNT_ID:rule/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenySNSModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "sns:DeleteTopic",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Unsubscribe"
+      ],
+      "Resource": "arn:aws:sns:*:HARBOR_ACCOUNT_ID:*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "DenyWAFv2ModifyHarborCentral",
+      "Effect": "Deny",
+      "Action": [
+        "wafv2:DeleteWebACL",
+        "wafv2:UpdateWebACL",
+        "wafv2:AssociateWebACL",
+        "wafv2:DisassociateWebACL"
+      ],
+      "Resource": "arn:aws:wafv2:*:HARBOR_ACCOUNT_ID:*/webacl/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "HARBOR_ACCOUNT_ID"
+        }
+      }
+    }
+  ]
+}

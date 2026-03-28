@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Harbor Agent Reporter Role — deployed to workload accounts via CT StackSet.
+  Allows agents in this account to call Harbor Central API and put events to Harbor EventBridge bus.
+
+Parameters:
+  HarborCentralAccountId:
+    Type: String
+    Description: AWS Account ID where Harbor Central is deployed (Shared Services account)
+  HarborApiGatewayArn:
+    Type: String
+    Description: ARN of Harbor API Gateway (arn:aws:execute-api:REGION:ACCOUNT:API_ID/*)
+  HarborEventBusArn:
+    Type: String
+    Description: ARN of Harbor EventBridge bus (arn:aws:events:REGION:ACCOUNT:event-bus/harbor-events)
+
+Resources:
+  HarborAgentReporterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: harbor-agent-reporter
+      Description: Allows agents to register, report health, and discover via Harbor Central API
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Allow any principal in this account to assume (agents, Lambdas, ECS tasks)
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:PrincipalTag/harbor-agent: "true"
+      MaxSessionDuration: 3600
+      Tags:
+        - Key: Project
+          Value: Harbor
+        - Key: ManagedBy
+          Value: CT-StackSet
+
+  HarborApiAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: harbor-api-access
+      Roles:
+        - !Ref HarborAgentReporterRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Invoke Harbor API Gateway
+          - Sid: InvokeHarborApi
+            Effect: Allow
+            Action:
+              - execute-api:Invoke
+            Resource: !Ref HarborApiGatewayArn
+          # Put events to Harbor EventBridge bus
+          - Sid: PutHarborEvents
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !Ref HarborEventBusArn
+          # Get Cognito tokens (for M2M auth)
+          - Sid: GetCognitoToken
+            Effect: Allow
+            Action:
+              - cognito-idp:InitiateAuth
+            Resource: !Sub "arn:aws:cognito-idp:*:${HarborCentralAccountId}:userpool/*"
+
+Outputs:
+  RoleArn:
+    Description: ARN of the harbor-agent-reporter role
+    Value: !GetAtt HarborAgentReporterRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+  RoleName:
+    Description: Name of the harbor-agent-reporter role
+    Value: !Ref HarborAgentReporterRole

@@ -1,3 +1,3 @@
-from .service import RegistryService
+from .service import RegistryService, TRANSITIONS
 
-__all__ = ["RegistryService"]
+__all__ = ["RegistryService", "TRANSITIONS"]

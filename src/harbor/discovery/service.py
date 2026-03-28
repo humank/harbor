@@ -1,4 +1,4 @@
-"""Discovery service — find agents by capability, phase, or skill."""
+"""Discovery service — tenant-aware agent lookup."""
 
 import structlog
 
@@ -9,27 +9,30 @@ logger = structlog.get_logger(__name__)
 
 
 class DiscoveryService:
-    def __init__(self, store: AgentStore | None = None):
-        self.store = store or AgentStore()
+    """Find agents by capability, phase, or skill — scoped by tenant."""
 
-    def by_capability(self, capability: str) -> list[AgentRecord]:
-        return self.store.find_by_capability(capability)
+    def __init__(self, store: AgentStore) -> None:
+        self.store = store
 
-    def by_phase(self, phase: str) -> list[AgentRecord]:
-        return self.store.find_by_phase(phase)
+    def by_capability(self, tenant_id: str, capability: str) -> list[AgentRecord]:
+        """Find published agents by capability within a tenant."""
+        return self.store.find_by_capability(tenant_id, capability)
 
-    def by_skill(self, skill_id: str) -> list[AgentRecord]:
-        """Search across all active agents for a matching skill."""
-        all_agents = self.store.list_all()
-        return [a for a in all_agents if any(s.id == skill_id for s in a.skills)]
+    def by_phase(self, tenant_id: str, phase: str) -> list[AgentRecord]:
+        """Find published agents by phase within a tenant."""
+        return self.store.find_by_phase(tenant_id, phase)
 
-    def resolve(self, *, capability: str | None = None, phase: str | None = None) -> AgentRecord | None:
-        """Resolve the best agent for a given capability or phase."""
+    def resolve(
+        self,
+        tenant_id: str,
+        *,
+        capability: str | None = None,
+        phase: str | None = None,
+    ) -> AgentRecord | None:
+        """Resolve the best published agent for a capability or phase."""
         candidates: list[AgentRecord] = []
         if capability:
-            candidates = self.by_capability(capability)
+            candidates = self.by_capability(tenant_id, capability)
         elif phase:
-            candidates = self.by_phase(phase)
-        if not candidates:
-            return None
-        return candidates[0]  # already sorted by priority
+            candidates = self.by_phase(tenant_id, phase)
+        return candidates[0] if candidates else None
