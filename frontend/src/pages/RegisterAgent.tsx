@@ -51,23 +51,23 @@ export default function RegisterAgent() {
 
   return (
     <div className="mx-auto max-w-2xl py-8">
-      <h1 className="mb-6 text-2xl font-semibold text-slate-900">Register Agent</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-primary">Register Agent</h1>
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
+            <p className="rounded-lg bg-red-900/30 border border-red-800 px-4 py-2 text-sm text-red-400">{error}</p>
           )}
           <Input id="agent_id" label="Agent ID" value={form.agent_id} onChange={set('agent_id')} required placeholder="e.g. agent-code-reviewer" />
           <Input id="name" label="Name" value={form.name} onChange={set('name')} required placeholder="e.g. Code Reviewer" />
           <div>
-            <label htmlFor="description" className="mb-1 block text-sm font-medium text-slate-700">Description</label>
-            <textarea id="description" value={form.description} onChange={set('description')} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none" placeholder="What does this agent do?" />
+            <label htmlFor="description" className="mb-1 block text-sm font-medium text-text-muted">Description</label>
+            <textarea id="description" value={form.description} onChange={set('description')} rows={3} className="w-full rounded-lg border border-border bg-bg-card px-3 py-2 text-sm text-text placeholder:text-text-muted/50 transition-colors duration-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" placeholder="What does this agent do?" />
           </div>
           <Input id="capabilities" label="Capabilities (comma-separated)" value={form.capabilities} onChange={set('capabilities')} placeholder="e.g. code_review, static_analysis" />
           <Input id="phase_affinity" label="Phase Affinity (comma-separated)" value={form.phase_affinity} onChange={set('phase_affinity')} placeholder="e.g. discovery, implementation" />
           <Input id="url" label="URL (optional)" value={form.url} onChange={set('url')} placeholder="https://agent.example.com" />
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => navigate(-1)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>{submitting ? 'Registering…' : 'Register'}</Button>
           </div>
         </form>

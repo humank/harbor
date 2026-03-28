@@ -33,8 +33,8 @@ export default function AuditLog() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <FileText className="h-6 w-6 text-sky-600" />
-        <h1 className="text-2xl font-bold text-slate-900">Audit Log</h1>
+        <FileText className="h-6 w-6 text-primary" />
+        <h1 className="text-2xl font-bold text-primary">Audit Log</h1>
       </div>
 
       <Input
@@ -44,13 +44,13 @@ export default function AuditLog() {
       />
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading audit entries…</p>
+        <p className="text-sm text-text-muted">Loading audit entries…</p>
       ) : sorted.length === 0 ? (
-        <Card className="text-center text-slate-500 py-12">No audit entries found.</Card>
+        <Card className="text-center text-text-muted py-12">No audit entries found.</Card>
       ) : (
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm text-left">
-            <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
+            <thead className="border-b border-border bg-bg-hover text-text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Timestamp</th>
                 <th className="px-4 py-3 font-medium">Agent</th>
@@ -59,14 +59,14 @@ export default function AuditLog() {
                 <th className="px-4 py-3 font-medium">Details</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {sorted.map((e, i) => (
-                <tr key={`${e.timestamp}-${e.agent_id}-${i}`} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{formatTs(e.timestamp)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-800">{e.agent_id}</td>
+                <tr key={`${e.timestamp}-${e.agent_id}-${i}`} className="bg-bg-card transition-colors duration-200 hover:bg-bg-hover">
+                  <td className="px-4 py-3 whitespace-nowrap text-text-muted">{formatTs(e.timestamp)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-text">{e.agent_id}</td>
                   <td className="px-4 py-3"><Badge label={e.action} /></td>
-                  <td className="px-4 py-3 text-slate-600">{e.actor}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{truncate(e.details)}</td>
+                  <td className="px-4 py-3 text-text">{e.actor}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-text-muted max-w-xs truncate">{truncate(e.details)}</td>
                 </tr>
               ))}
             </tbody>

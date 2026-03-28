@@ -26,14 +26,14 @@ export default function Dashboard() {
   }, [])
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20 text-slate-500">Loading dashboard…</div>
+    return <div className="flex items-center justify-center py-20 text-text-muted">Loading dashboard…</div>
   }
 
   if (error) {
     return (
       <div className="mx-auto max-w-lg py-20 text-center">
         <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-red-500" />
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-400">{error}</p>
       </div>
     )
   }
@@ -42,62 +42,58 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total Agents', value: agents.length, icon: Bot, color: 'text-sky-600' },
-          { label: 'Published', value: count('published'), icon: Activity, color: 'text-green-600' },
-          { label: 'Suspended', value: count('suspended'), icon: AlertTriangle, color: 'text-red-600' },
-          { label: 'Pending Review', value: count('in_review'), icon: Bot, color: 'text-amber-600' },
+          { label: 'Total Agents', value: agents.length, icon: Bot },
+          { label: 'Published', value: count('published'), icon: Activity },
+          { label: 'Suspended', value: count('suspended'), icon: AlertTriangle },
+          { label: 'Pending Review', value: count('in_review'), icon: Bot },
         ].map((s) => (
-          <Card key={s.label}>
+          <Card key={s.label} hover>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-slate-500">{s.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-slate-900">{s.value}</p>
+                <p className="text-xs font-medium text-text-muted">{s.label}</p>
+                <p className="mt-1 text-2xl font-semibold text-primary">{s.value}</p>
               </div>
-              <s.icon className={`h-8 w-8 ${s.color}`} />
+              <s.icon className="h-8 w-8 text-text-muted" />
             </div>
           </Card>
         ))}
       </div>
 
-      {/* Health summary */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Health Summary</h2>
+        <h2 className="mb-3 text-sm font-semibold text-text">Health Summary</h2>
         <div className="flex gap-4">
           {['healthy', 'unhealthy', 'unknown'].map((state) => (
             <div key={state} className="flex items-center gap-2">
               <Badge label={state} />
-              <span className="text-sm font-medium text-slate-700">{health[state] ?? 0}</span>
+              <span className="text-sm font-medium text-text">{health[state] ?? 0}</span>
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Recent activity */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Recent Activity</h2>
+        <h2 className="mb-3 text-sm font-semibold text-text">Recent Activity</h2>
         {audit.length === 0 ? (
-          <p className="text-sm text-slate-500">No recent activity.</p>
+          <p className="text-sm text-text-muted">No recent activity.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {audit.map((e, i) => (
               <li key={i} className="flex items-center gap-3 py-2 text-sm">
-                <span className="shrink-0 text-xs text-slate-400">{new Date(e.timestamp).toLocaleString()}</span>
+                <span className="shrink-0 text-xs text-text-muted">{new Date(e.timestamp).toLocaleString()}</span>
                 <Badge label={e.action} />
-                <span className="truncate text-slate-700">{e.agent_id}</span>
-                <span className="ml-auto text-xs text-slate-500">{e.actor}</span>
+                <span className="truncate text-text">{e.agent_id}</span>
+                <span className="ml-auto text-xs text-text-muted">{e.actor}</span>
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      {/* Quick actions */}
       <div className="flex gap-3">
         <Link to="/register">
-          <Button>
+          <Button variant="primary">
             <Plus className="mr-1.5 h-4 w-4" />
             Register Agent
           </Button>

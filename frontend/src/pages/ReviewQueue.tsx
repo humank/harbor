@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { listPendingReviews, submitReview } from '../api/client';
 import type { AgentRecord } from '../types/agent';
 
@@ -29,12 +30,12 @@ function ReviewCard({
   }
 
   return (
-    <Card>
+    <Card hover>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <Link
             to={`/agents/${agent.agent_id}`}
-            className="text-lg font-semibold text-sky-600 hover:text-sky-700 cursor-pointer"
+            className="text-lg font-semibold text-text hover:text-primary cursor-pointer transition-colors duration-200"
           >
             {agent.name}
           </Link>
@@ -42,14 +43,14 @@ function ReviewCard({
             <Badge label={agent.lifecycle_status} />
           </div>
           {agent.description && (
-            <p className="mt-2 text-sm text-slate-600">{agent.description}</p>
+            <p className="mt-2 text-sm text-text-muted">{agent.description}</p>
           )}
           {agent.capabilities && agent.capabilities.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {agent.capabilities.map((cap) => (
                 <span
                   key={cap}
-                  className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+                  className="rounded bg-cta/20 px-2 py-0.5 text-xs text-cta"
                 >
                   {cap}
                 </span>
@@ -57,7 +58,7 @@ function ReviewCard({
             </div>
           )}
           {agent.created_by && (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-text-muted">
               Submitted by {agent.created_by}
             </p>
           )}
@@ -66,23 +67,23 @@ function ReviewCard({
 
       {action === null ? (
         <div className="mt-4 flex gap-2">
-          <Button onClick={() => setAction('approve')}>Approve</Button>
-          <Button onClick={() => setAction('reject')}>Reject</Button>
+          <Button variant="primary" onClick={() => setAction('approve')}>Approve</Button>
+          <Button variant="danger" onClick={() => setAction('reject')}>Reject</Button>
         </div>
       ) : (
         <div className="mt-4 space-y-2">
-          <input
-            type="text"
+          <Input
+            label={`Reason for ${action}`}
             placeholder={`Reason for ${action}...`}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-sky-500 focus:outline-none"
           />
           <div className="flex gap-2">
-            <Button onClick={handleSubmit} disabled={submitting}>
+            <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
               {submitting ? 'Submitting...' : `Confirm ${action}`}
             </Button>
             <Button
+              variant="secondary"
               onClick={() => {
                 setAction(null);
                 setReason('');
@@ -114,18 +115,18 @@ export default function ReviewQueue() {
   }
 
   if (loading) {
-    return <p className="p-6 text-slate-500">Loading pending reviews...</p>;
+    return <p className="p-6 text-text-muted">Loading pending reviews...</p>;
   }
 
   if (error) {
-    return <p className="p-6 text-red-600">Error: {error}</p>;
+    return <p className="p-6 text-red-400">Error: {error}</p>;
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-6">
-      <h1 className="text-2xl font-bold text-slate-900">Review Queue</h1>
+      <h1 className="text-2xl font-bold text-primary">Review Queue</h1>
       {agents.length === 0 ? (
-        <p className="text-slate-500">No pending reviews</p>
+        <p className="text-text-muted">No pending reviews</p>
       ) : (
         agents.map((agent) => (
           <ReviewCard

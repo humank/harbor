@@ -70,24 +70,26 @@ export default function Discovery() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Discovery</h1>
+      <h1 className="text-2xl font-bold text-primary">Discovery</h1>
 
       <Card>
         <div className="space-y-4">
           <fieldset>
-            <legend className="mb-2 text-sm font-medium text-slate-700">Search mode</legend>
-            <div className="flex gap-4">
+            <legend className="mb-2 text-sm font-medium text-text-muted">Search mode</legend>
+            <div className="flex gap-2">
               {(['capability', 'phase'] as const).map(m => (
-                <label key={m} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="mode"
-                    checked={mode === m}
-                    onChange={() => setMode(m)}
-                    className="accent-sky-600"
-                  />
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 ${
+                    mode === m
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-muted hover:bg-bg-hover'
+                  }`}
+                >
                   By {m}
-                </label>
+                </button>
               ))}
             </div>
           </fieldset>
@@ -114,15 +116,15 @@ export default function Discovery() {
       </Card>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}
 
-      {loading && <p className="text-sm text-slate-500">Searching…</p>}
+      {loading && <p className="text-sm text-text-muted">Searching…</p>}
 
       {!loading && !error && results.length === 0 && query.trim() !== '' && (
-        <p className="text-sm text-slate-500">No agents found.</p>
+        <p className="text-sm text-text-muted">No agents found.</p>
       )}
 
       {results.length > 0 && (
@@ -133,23 +135,24 @@ export default function Discovery() {
             return (
               <Card
                 key={agent.agent_id}
-                className={isResolved ? 'ring-2 ring-sky-500 border-sky-300' : ''}
+                hover
+                className={isResolved ? 'ring-2 ring-primary border-primary' : ''}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900">{agent.name}</span>
+                      <span className="font-semibold text-text">{agent.name}</span>
                       <Badge label={agent.lifecycle_status} />
-                      {isResolved && <Badge label="best match" className="bg-sky-100 text-sky-800" />}
+                      {isResolved && <Badge label="best match" />}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {agent.capabilities.map(c => (
-                        <span key={c} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{c}</span>
+                        <span key={c} className="rounded bg-cta/20 px-2 py-0.5 text-xs text-cta">{c}</span>
                       ))}
                     </div>
                   </div>
                   {priority !== null && (
-                    <span className="shrink-0 text-xs font-medium text-slate-500">
+                    <span className="shrink-0 text-xs font-medium text-text-muted">
                       priority {priority}
                     </span>
                   )}
