@@ -4,18 +4,29 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from moto import mock_aws
 
+from harbor.api.deps import Services
 from harbor.api.routes import create_app
-from harbor.models.agent import OwnerInfo
+from harbor.store.agent_store import AgentStore
+from harbor.store.audit_store import AuditStore
+from harbor.store.health_store import HealthStore
+from harbor.store.policy_store import PolicyStore
+from harbor.store.version_store import VersionStore
 from tests.unit.conftest import TABLE_NAME, _create_table
-from harbor.store.dynamo import AgentStore
 
 
 @pytest.fixture
 def app():
     with mock_aws():
         _create_table(TABLE_NAME)
-        store = AgentStore(table_name=TABLE_NAME, region="us-east-1")
-        yield create_app(store)
+        kwargs = {"table_name": TABLE_NAME, "region": "us-east-1"}
+        svc = Services(
+            agent_store=AgentStore(**kwargs),
+            audit_store=AuditStore(**kwargs),
+            health_store=HealthStore(**kwargs),
+            policy_store=PolicyStore(**kwargs),
+            version_store=VersionStore(**kwargs),
+        )
+        yield create_app(svc)
 
 
 @pytest.fixture
@@ -48,8 +59,7 @@ async def test_list_agents(client: AsyncClient) -> None:
     await client.post("/api/v1/agents", json=AGENT_BODY)
     resp = await client.get("/api/v1/agents")
     assert resp.status_code == 200
-    data = resp.json()
-    assert len(data["items"]) == 1
+    assert len(resp.json()["items"]) == 1
 
 
 @pytest.mark.anyio

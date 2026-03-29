@@ -99,3 +99,13 @@ class ApprovalPolicy(BaseModel):
     required_roles: list[str] = Field(default_factory=list)
     min_approvals: int = 1
     prerequisites: dict[str, bool] = Field(default_factory=dict)
+
+
+# ── Policy Decision ───────────────────────────────────────
+
+
+class PolicyDecision(BaseModel):
+    """Result of a policy evaluation."""
+
+    allowed: bool
+    reason: str = ""

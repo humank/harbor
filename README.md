@@ -1,20 +1,20 @@
 # ⚓ Harbor
 
-**The Management Plane for AI Agents on AWS**
+**The Multi-Cloud Registry & Discovery Platform for AI Agents**
 
-Harbor is an agent platform management system that brings API Management (APIM) principles to AI agent ecosystems running on AWS Bedrock AgentCore. It provides a centralized registry, discovery, lifecycle governance, and runtime policy enforcement — the missing management layer between your agents and production.
+Harbor is a centralized registry, discovery, and governance platform for AI agents — regardless of where they run. Agents deployed on AWS Bedrock AgentCore, Azure AI Agent Service, Google Vertex AI, or your own infrastructure all register with Harbor to be discovered, governed, and audited.
 
-> When you have 30+ agents across multiple teams and accounts, you need the same governance you'd apply to microservices: registration, discovery, lifecycle management, routing, and observability. Harbor is that governance layer.
+> Harbor is a passport office, not an airline. Your agents fly on whatever cloud they want. Harbor issues the passport, checks compliance, and tells other agents where to find them.
 
 ---
 
 ## The Problem
 
-AWS Bedrock AgentCore provides the runtime — identity, memory, tools, and gateway. But it doesn't answer:
+Every cloud provider offers an agent runtime. None of them answer:
 
-- **Which agents exist?** No central registry across accounts and teams.
+- **Which agents exist across our organization?** No central registry across clouds, accounts, and teams.
 - **Who approved this agent for production?** No lifecycle governance or approval workflow.
-- **Can Agent A talk to Agent B?** No communication policy enforcement.
+- **Can Agent A talk to Agent B?** No cross-cloud communication policy enforcement.
 - **What tools is this agent allowed to use?** No capability boundary control.
 - **What happened at 3am?** No unified audit trail across your agent fleet.
 
@@ -24,62 +24,144 @@ These are the same problems API Management solved for microservices a decade ago
 
 | Capability | Without Harbor | With Harbor |
 |-----------|---------------|-------------|
-| Agent inventory | Spreadsheets, tribal knowledge | Centralized registry with metadata |
+| Agent inventory | Spreadsheets, tribal knowledge | Centralized registry with cross-cloud metadata |
 | Deployment approval | Slack messages, hope | Lifecycle pipeline: draft → review → approve → publish |
 | Cross-team discovery | "Hey, does anyone have an agent that does X?" | `harbor discover -c summarization` |
 | Access control | All agents can call anything | Communication ACL + capability boundaries |
 | Incident response | "Which agent is causing this?" | `harbor lifecycle agent-x suspended --reason "incident-1234"` |
 | Compliance audit | Manual evidence collection | Immutable audit trail with tenant context |
-| Multi-account governance | Per-account silos | Control Tower integrated, org-wide visibility |
+| Multi-cloud governance | Per-cloud silos | Unified registry, one API for all providers |
 
 ## Key Differentiators
 
-- **Built for AWS Bedrock AgentCore** — first management platform purpose-built for the AgentCore runtime, aligned with the A2A Agent Card protocol
-- **Hot-swappable agent deployment** — register, publish, suspend, and retire agents without downtime; discovery queries always return the latest published state
+- **Cloud-agnostic registry** — agents from AWS, Azure, GCP, or on-prem all register with the same API and data model
+- **Harbor is a registry, not a deployment tool** — operators deploy agents with their own tooling (Terraform, CDK, ARM Template, gcloud), then register metadata with Harbor
+- **A2A Agent Card alignment** — agent metadata follows the A2A protocol spec, extended with governance and cross-cloud fields
+- **Hot-swappable agent lifecycle** — register, publish, suspend, and retire agents without downtime; discovery always returns the latest published state
 - **Enterprise governance** — lifecycle approval pipeline with role-based access (risk officer, compliance officer sign-off for production)
-- **Multi-tenant by design** — tenant = AWS Account; integrates with Control Tower landing zones for org-wide agent governance
-- **Policy enforcement** — capability boundaries (what tools/APIs/MCP servers an agent can use), communication ACL (which agents can talk to each other), and schedule windows (when agents can operate)
+- **Multi-tenant by design** — tenant = cloud account/project/subscription; integrates with AWS Control Tower for org-wide visibility
+- **Policy enforcement** — capability boundaries, communication ACL, and schedule windows — evaluated centrally, enforced across clouds
 - **Full observability** — health monitoring, audit trail, EventBridge events, Security Hub integration
 
 ## Architecture
 
+```mermaid
+graph TB
+    subgraph Operators["Operators (deploy with their own tools)"]
+        direction LR
+        TF["Terraform / CDK / Pulumi"]
+        ARM["ARM Template / Bicep"]
+        GC["gcloud CLI"]
+    end
+
+    subgraph Runtimes["Agent Runtimes (any cloud)"]
+        direction LR
+        AWS_RT["AWS Bedrock<br/>AgentCore"]
+        AZ_RT["Azure AI<br/>Agent Service"]
+        GCP_RT["Google<br/>Vertex AI"]
+        CUSTOM["On-Prem /<br/>Custom"]
+    end
+
+    subgraph Harbor["Harbor Central (AWS Serverless)"]
+        CF["CloudFront + WAF"]
+        APIGW["API Gateway"]
+        FN["Lambda<br/>FastAPI + Mangum"]
+        DB["DynamoDB<br/>Single-Table"]
+        EB["EventBridge"]
+        COG["Cognito"]
+    end
+
+    subgraph Consumers["Consumers"]
+        direction LR
+        UI["Harbor UI<br/>React SPA"]
+        CLI["Harbor CLI"]
+        SDK["Agent SDK /<br/>Direct API"]
+    end
+
+    TF --> AWS_RT
+    ARM --> AZ_RT
+    GC --> GCP_RT
+
+    AWS_RT -- "register / heartbeat / discover" --> CF
+    AZ_RT -- "register / heartbeat / discover" --> CF
+    GCP_RT -- "register / heartbeat / discover" --> CF
+    CUSTOM -- "register / heartbeat / discover" --> CF
+
+    CF --> APIGW --> FN
+    FN --> DB
+    FN --> EB
+    FN --> COG
+
+    UI --> CF
+    CLI --> CF
+    SDK --> CF
+
+    style Harbor fill:#0f172a,stroke:#3b82f6,color:#e2e8f0
+    style Runtimes fill:#1e293b,stroke:#64748b,color:#e2e8f0
+    style Operators fill:#1e293b,stroke:#64748b,color:#e2e8f0
+    style Consumers fill:#1e293b,stroke:#64748b,color:#e2e8f0
 ```
-┌─ Management Account (Control Tower) ─────────────────────────┐
-│  Landing Zone │ SCPs │ Account Factory │ Config Rules         │
-└──────────────────────────────────────────────────────────────┘
-         │ governs
-         ▼
-┌─ Shared Services OU ─────────────────────────────────────────┐
-│  Harbor Central Account                                       │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ CloudFront → WAF → S3 (React SPA)                       │ │
-│  │           → API GW → Lambda (FastAPI + Mangum)           │ │
-│  │                         ↓                                │ │
-│  │                    DynamoDB (multi-tenant, single-table)  │ │
-│  │                    EventBridge (cross-account events)     │ │
-│  │                    Cognito (IAM Identity Center SSO)      │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
-         │ cross-account IAM roles
-         ▼
-┌─ Workload OU ────────────────────────────────────────────────┐
-│  {BU}-Prod Account                                            │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ Bedrock AgentCore Runtime                                │ │
-│  │   Agent A ──→ Harbor API (register, heartbeat, discover) │ │
-│  │   Agent B ──→ Harbor API (policy check, communicate)     │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+
+### Agent Onboarding Flow
+
+```mermaid
+sequenceDiagram
+    participant Op as Operator
+    participant Cloud as Any Cloud Runtime
+    participant H as Harbor API
+    participant Rev as Reviewer
+
+    Op->>Cloud: Deploy agent (Terraform / CDK / ARM / gcloud)
+    Cloud-->>Op: Agent running ✓
+
+    Op->>H: POST /agents (metadata, runtime, endpoint, compliance)
+    H-->>Op: lifecycle: draft
+
+    Op->>H: PUT /agents/{id}/lifecycle?target=submitted
+    H-->>Rev: Pending review notification
+
+    Rev->>H: POST /reviews/{id}?action=approve
+    H-->>H: lifecycle: approved → published
+
+    Cloud->>H: PUT /agents/{id}/health (periodic heartbeat)
+    Cloud->>H: GET /discover/capability/summarization
+    H-->>Cloud: Best matching published agent
 ```
+
+## Agent Data Model
+
+When registering, operators provide an "agent passport" — metadata about where the agent runs, how to reach it, and what it can do:
+
+| Section | Fields | Who Provides |
+|---------|--------|-------------|
+| **Identity** | `agent_id`, `name`, `description`, `version` | Operator (required) |
+| **Tenant** | `tenant_id`, `owner` | Operator (required) |
+| **Runtime Origin** | `provider` (aws/azure/gcp/on-prem), `runtime`, `region`, `account_id`, `resource_id` | Operator |
+| **Endpoint** | `url`, `protocol` (http/grpc/a2a/mcp), `auth_type`, `health_check_path` | Operator |
+| **Capabilities** | `skills`, `capabilities`, `phase_affinity` | Operator |
+| **Dependencies** | `required_agents`, `required_tools`, `models` | Operator |
+| **Compliance** | `data_residency`, `certifications`, `pii_handling`, `data_classification` | Operator |
+| **Governance** | `lifecycle_status`, `visibility`, `routing_rules` | Harbor-managed |
+
+All fields except identity and tenant are optional with sensible defaults — low barrier to register, rich metadata for governance review.
 
 ## Agent Lifecycle
 
-Harbor enforces a governance pipeline for every agent:
-
-```
-Draft → Submitted → In Review → Approved → Published → [Suspended] → Deprecated → Retired
-                        │
-                   Rejected → Draft
+```mermaid
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Submitted
+    Submitted --> InReview: reviewer picks up
+    InReview --> Approved: passes review
+    InReview --> Draft: rejected
+    Approved --> Published
+    Published --> Suspended: emergency kill switch
+    Published --> Deprecated: sunset announced
+    Suspended --> Published: reinstated
+    Suspended --> Deprecated
+    Deprecated --> Retired
+    Deprecated --> Published: un-deprecate
+    Retired --> [*]
 ```
 
 | Environment | Approval Required |
@@ -107,6 +189,7 @@ export HARBOR_URL=http://localhost:8100/api/v1
 export HARBOR_TENANT=dev-tenant
 export HARBOR_OWNER=dev@harbor.local
 
+# Register an agent from any cloud
 harbor register my-agent "My Agent" --capabilities nlp,summarize
 harbor list
 harbor lifecycle my-agent submitted
@@ -136,16 +219,16 @@ data_classification:
 
 ### Communication ACL
 
-Control which agents can talk to each other (default: allowlist / deny-all for financial services):
+Control which agents can talk to each other (default: allowlist / deny-all):
 
 ```yaml
 rules:
   - from: "trading-agent"
     to: "risk-assessment-agent"
-    required: true          # must call risk before acting
+    required: true
   - from: "external-*"
     to: "internal-*"
-    allowed: false          # external agents blocked from internal
+    allowed: false
 ```
 
 ### Schedule Windows
@@ -159,19 +242,6 @@ active_windows:
 out_of_window_action: "reject"
 ```
 
-## Control Tower Integration
-
-Harbor deploys into existing Control Tower landing zones as a Shared Services workload. Integration includes:
-
-- **StackSet template** — auto-provisions `harbor-agent-reporter` IAM role in workload accounts
-- **SCP guardrails** — protects Harbor Central resources, enforces agent tagging
-- **Cross-account EventBridge** — workload accounts emit health/status events to Harbor
-- **IAM Identity Center SSO** — Cognito SAML federation with enterprise IdP
-- **Security Hub** — custom findings for policy violations and unapproved agents
-- **Config Rules** — compliance checks for agent registration
-
-See [docs/enterprise-integration-guide.md](docs/enterprise-integration-guide.md) for the full runbook.
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -184,8 +254,6 @@ See [docs/enterprise-integration-guide.md](docs/enterprise-integration-guide.md)
 | CDN | CloudFront + S3 + WAF |
 | Auth | Cognito + IAM Identity Center |
 | Events | EventBridge + SNS |
-| Governance | Control Tower + SCPs + Config Rules |
-| Monitoring | Security Hub + CloudTrail |
 | IaC | AWS CDK (TypeScript) |
 | CLI | Click + httpx |
 
@@ -195,7 +263,13 @@ See [docs/enterprise-integration-guide.md](docs/enterprise-integration-guide.md)
 harbor/
 ├── src/harbor/              # Python backend (FastAPI)
 │   ├── models/              # Pydantic data models (agent, policy)
-│   ├── store/               # DynamoDB persistence (single-table)
+│   ├── store/               # DynamoDB persistence (5 store classes)
+│   │   ├── base.py          # Shared table access
+│   │   ├── agent_store.py   # Agent CRUD + indexes
+│   │   ├── health_store.py  # Health status
+│   │   ├── audit_store.py   # Audit entries
+│   │   ├── policy_store.py  # Policy CRUD
+│   │   └── version_store.py # Version snapshots
 │   ├── registry/            # Agent lifecycle governance
 │   ├── discovery/           # Capability & phase-based lookup
 │   ├── policy/              # Runtime policy enforcement
@@ -205,14 +279,18 @@ harbor/
 │   ├── events/              # EventBridge emitter
 │   ├── sync/                # A2A Agent Card import
 │   ├── cli/                 # CLI tool
-│   └── api/                 # FastAPI routes (29 endpoints)
-├── frontend/                # React SPA (8 pages)
-├── infrastructure/          # AWS CDK + CT integration
-│   ├── lib/                 # CDK stack (DynamoDB, Lambda, API GW, Cognito, CloudFront, WAF, EventBridge)
-│   └── ct-integration/      # StackSets, SCPs, Security Hub, Config Rules
-├── tests/                   # 93 tests (75 Python + 18 CDK)
-├── docs/                    # Architecture, API reference, integration guides
-└── scripts/                 # Deploy & destroy scripts
+│   └── api/                 # FastAPI routers (6 router modules)
+│       ├── deps.py          # Service container & auth
+│       ├── agents.py        # Agent CRUD + lifecycle
+│       ├── discovery.py     # Discovery endpoints
+│       ├── health.py        # Heartbeat + summary
+│       ├── audit.py         # Audit log
+│       ├── policies.py      # Policy CRUD + evaluate
+│       └── reviews.py       # Review queue
+├── frontend/                # React SPA
+├── infrastructure/          # AWS CDK
+├── tests/                   # 75 Python + 18 CDK tests
+└── docs/                    # Architecture, API reference, guides
 ```
 
 ## Documentation

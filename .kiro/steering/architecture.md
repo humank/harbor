@@ -38,21 +38,24 @@ User → WAF → CloudFront ─→ S3 (React SPA)
 
 ### Key Decisions
 
-1. **Serverless-first**: Lambda + API Gateway for backend. No ECS/Fargate.
+1. **Cloud-agnostic registry**: Agents from AWS, Azure, GCP, or on-prem all register with the same API.
+   - Harbor is a registry, not a deployment tool. Operators deploy with their own tooling.
+   - `RuntimeOrigin` captures provider, runtime, region, account. All optional.
+2. **Serverless-first**: Lambda + API Gateway for backend. No ECS/Fargate.
    - Rationale: Management platform has low traffic; serverless is cost-optimal.
-2. **Single-table DynamoDB**: All entities in one table with PK/SK composite keys.
+3. **Single-table DynamoDB**: All entities in one table with PK/SK composite keys.
    - Multi-tenant: all PKs prefixed with `TENANT#{tenant_id}#`
-3. **FastAPI + Mangum**: FastAPI for API definition, Mangum as Lambda adapter.
+4. **FastAPI + Mangum**: FastAPI for API definition, Mangum as Lambda adapter.
    - Same code runs locally (uvicorn) and in Lambda (Mangum handler).
-4. **React SPA + Tailwind CSS**: Static frontend on S3 + CloudFront.
+5. **React SPA + Tailwind CSS**: Static frontend on S3 + CloudFront.
    - No SSR. No Next.js. Pure client-side SPA.
-5. **CDK (TypeScript)**: All infrastructure as code via AWS CDK.
+6. **CDK (TypeScript)**: All infrastructure as code via AWS CDK.
    - One CDK app, multiple stacks if needed.
-6. **A2A Agent Card alignment**: Agent metadata schema follows the A2A protocol spec.
+7. **A2A Agent Card alignment**: Agent metadata schema follows the A2A protocol spec.
    - Extended with APIM + governance fields.
-7. **Multi-tenant by design**: Tenant = AWS Account. Derived from caller's account ID.
+8. **Multi-tenant by design**: Tenant = cloud account (AWS Account / Azure Sub / GCP Project).
    - All data access scoped by tenant_id. No cross-tenant leaks.
-8. **Control Tower integration**: CT provides account provisioning, SCPs, and guardrails.
+9. **Control Tower integration**: CT provides account provisioning, SCPs, and guardrails.
    - Harbor is a consumer of CT landing zone, not a replacement.
 
 ---
@@ -65,17 +68,31 @@ harbor/
 │   ├── agents/              # Kiro custom agents
 │   └── steering/            # Architecture & coding standards
 ├── src/harbor/              # Python backend
-│   ├── models/              # Pydantic data models
-│   ├── store/               # DynamoDB persistence layer
+│   ├── models/              # Pydantic data models (pure data, no I/O)
+│   ├── store/               # DynamoDB persistence layer (ONLY place for boto3 DynamoDB)
+│   │   ├── base.py          # Shared table access, cursor encoding
+│   │   ├── agent_store.py   # Agent CRUD + capability/phase indexes
+│   │   ├── health_store.py  # Health status read/write
+│   │   ├── audit_store.py   # Audit entry append/query
+│   │   ├── policy_store.py  # Capability, communication, schedule policy CRUD
+│   │   └── version_store.py # Version snapshot read/write
 │   ├── auth/                # JWT validation, tenant context, role-based access
+│   ├── events/              # EventBridge emitter (infrastructure adapter, injectable)
 │   ├── registry/            # Agent lifecycle + governance service
-│   ├── discovery/           # Agent lookup service (tenant-aware)
+│   ├── discovery/           # Agent lookup service (tenant-aware, policy-aware)
 │   ├── health/              # Health check service
 │   ├── audit/               # Audit log service
-│   ├── policy/              # Policy enforcement (capability, communication, schedule)
+│   ├── policy/              # Policy evaluation (capability, communication, schedule)
 │   ├── sync/                # A2A Agent Card sync
-│   ├── api/                 # FastAPI routes
-│   └── main.py              # Entrypoint (uvicorn / Mangum)
+│   ├── api/                 # FastAPI routers (HTTP concerns only)
+│   │   ├── deps.py          # Shared dependencies (auth, store, service injection)
+│   │   ├── agents.py        # Agent CRUD + lifecycle
+│   │   ├── discovery.py     # Discovery endpoints
+│   │   ├── health.py        # Heartbeat + summary
+│   │   ├── audit.py         # Audit log endpoints
+│   │   ├── policies.py      # Policy CRUD + evaluate
+│   │   └── reviews.py       # Review queue
+│   └── main.py              # Composition root (wiring only, no logic)
 ├── frontend/                # React SPA
 │   ├── src/
 │   │   ├── components/      # Shared UI components
@@ -107,7 +124,10 @@ harbor/
 - Tests mirror source structure: `tests/unit/test_<module>.py`.
 - No circular imports between `src/harbor/` subpackages.
 - `store/` is the ONLY layer that touches DynamoDB. Services use store, not boto3 directly.
+- `events/` is the ONLY layer that touches EventBridge. It is an infrastructure adapter, injected into services.
 - `policy/` is the ONLY layer that evaluates governance rules. Services call policy, not inline checks.
+- `api/` uses `APIRouter` per resource group. No closures inside `create_app()`.
+- `main.py` is the composition root — creates stores, services, app. No business logic.
 
 ---
 
@@ -134,7 +154,7 @@ Org (AWS Organization)
         └── Environment (account tag: dev/staging/prod)
 ```
 
-- `tenant_id` = AWS Account ID of the caller
+- `tenant_id` = AWS Account ID of the caller (or Azure Subscription / GCP Project / org-assigned ID)
 - Harbor maps account ID → org/OU/project via CT metadata
 - All DynamoDB queries MUST include tenant_id in the key condition
 

@@ -4,8 +4,8 @@ from typing import Any
 
 import structlog
 
-from harbor.models.agent import AgentRecord, AgentSkill, OwnerInfo
-from harbor.store.dynamo import AgentStore
+from harbor.models.agent import AgentRecord, AgentSkill, EndpointInfo, OwnerInfo
+from harbor.store.agent_store import AgentStore
 
 logger = structlog.get_logger(__name__)
 
@@ -55,7 +55,7 @@ class SyncService:
             version=str(card.get("version", "1.0.0")),
             tenant_id=tenant_id,
             owner=owner,
-            url=url,
+            endpoint=EndpointInfo(url=url, protocol="a2a"),
             skills=skills,
             capabilities=capabilities,
         )

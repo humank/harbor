@@ -6,7 +6,11 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from harbor.store.dynamo import AgentStore
+from harbor.store.agent_store import AgentStore
+from harbor.store.audit_store import AuditStore
+from harbor.store.health_store import HealthStore
+from harbor.store.policy_store import PolicyStore
+from harbor.store.version_store import VersionStore
 
 os.environ["HARBOR_AUTH_DISABLED"] = "true"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
@@ -70,3 +74,35 @@ def store():
     with mock_aws():
         _create_table(TABLE_NAME)
         yield AgentStore(table_name=TABLE_NAME, region="us-east-1")
+
+
+@pytest.fixture
+def audit_store():
+    """Provide a moto-backed AuditStore."""
+    with mock_aws():
+        _create_table(TABLE_NAME)
+        yield AuditStore(table_name=TABLE_NAME, region="us-east-1")
+
+
+@pytest.fixture
+def health_store():
+    """Provide a moto-backed HealthStore."""
+    with mock_aws():
+        _create_table(TABLE_NAME)
+        yield HealthStore(table_name=TABLE_NAME, region="us-east-1")
+
+
+@pytest.fixture
+def policy_store():
+    """Provide a moto-backed PolicyStore."""
+    with mock_aws():
+        _create_table(TABLE_NAME)
+        yield PolicyStore(table_name=TABLE_NAME, region="us-east-1")
+
+
+@pytest.fixture
+def version_store():
+    """Provide a moto-backed VersionStore."""
+    with mock_aws():
+        _create_table(TABLE_NAME)
+        yield VersionStore(table_name=TABLE_NAME, region="us-east-1")

@@ -3,7 +3,7 @@
 import structlog
 
 from harbor.models.agent import AgentRecord
-from harbor.store.dynamo import AgentStore
+from harbor.store.agent_store import AgentStore
 
 logger = structlog.get_logger(__name__)
 
@@ -23,11 +23,7 @@ class DiscoveryService:
         return self.store.find_by_phase(tenant_id, phase)
 
     def resolve(
-        self,
-        tenant_id: str,
-        *,
-        capability: str | None = None,
-        phase: str | None = None,
+        self, tenant_id: str, *, capability: str | None = None, phase: str | None = None,
     ) -> AgentRecord | None:
         """Resolve the best published agent for a capability or phase."""
         candidates: list[AgentRecord] = []

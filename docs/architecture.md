@@ -2,46 +2,65 @@
 
 ## Overview
 
-Harbor is an agent platform management system that brings API Management (APIM) principles to AI agent ecosystems running on AWS Bedrock AgentCore. It provides a centralized registry, discovery, lifecycle governance, and runtime policy enforcement — built entirely on AWS serverless primitives and designed to deploy into existing Control Tower landing zones.
+Harbor is a cloud-agnostic registry, discovery, and governance platform for AI agents. Operators deploy agents on any cloud (AWS, Azure, GCP) or on-prem using their own tooling, then register metadata with Harbor. Harbor provides centralized lifecycle governance, capability-based discovery, runtime policy enforcement, and an immutable audit trail.
+
+Harbor is a **registry, not a deployment tool**. It doesn't run your agents — it knows where they are, what they can do, and whether they're allowed to do it.
 
 ## Design Principles
 
-1. **Serverless-first** — Lambda + API Gateway for compute. No ECS, Fargate, or EC2. Management-plane traffic is low and bursty; serverless is cost-optimal.
-2. **Single-table DynamoDB** — All entities in one table with composite PK/SK keys. Multi-tenant by construction, not by convention.
-3. **Tenant = AWS Account** — Tenant identity derived from the caller's AWS account ID. No tenant parameter in the API — it's extracted from the auth token.
-4. **Policy enforcement at the platform layer** — Agents don't enforce their own governance. Harbor evaluates capability boundaries, communication ACLs, and schedule windows centrally.
-5. **A2A Agent Card alignment** — Agent metadata schema follows the A2A protocol spec, extended with APIM and governance fields.
-6. **Control Tower native** — Harbor is a consumer of CT landing zones, not a replacement. It deploys into Shared Services OU and integrates with SCPs, StackSets, and IAM Identity Center.
+1. **Cloud-agnostic registry** — agents from any provider register with the same API and data model. The `RuntimeOrigin` field captures where the agent runs; Harbor doesn't care.
+2. **Serverless-first** — Lambda + API Gateway for compute. Management-plane traffic is low and bursty; serverless is cost-optimal.
+3. **Single-table DynamoDB** — all entities in one table with composite PK/SK keys. Multi-tenant by construction.
+4. **Tenant = cloud account** — AWS Account ID, Azure Subscription ID, GCP Project ID, or org-assigned identifier. Derived from auth token, never passed as a parameter.
+5. **Policy enforcement at the platform layer** — agents don't enforce their own governance. Harbor evaluates capability boundaries, communication ACLs, and schedule windows centrally.
+6. **A2A Agent Card alignment** — agent metadata follows the A2A protocol spec, extended with governance and cross-cloud fields.
+7. **Three-layer separation** — API → Service → Store → DynamoDB. No shortcuts.
 
 ## System Architecture
 
-```
-┌─ Management Account (Control Tower) ─────────────────────────┐
-│  Landing Zone │ SCPs │ Account Factory │ Config Rules         │
-└──────────────────────────────────────────────────────────────┘
-         │ governs
-         ▼
-┌─ Shared Services OU ─────────────────────────────────────────┐
-│  Harbor Central Account                                       │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ CloudFront → WAF → S3 (React SPA)                       │ │
-│  │           → API GW → Lambda (FastAPI + Mangum)           │ │
-│  │                         ↓                                │ │
-│  │                    DynamoDB (multi-tenant, single-table)  │ │
-│  │                    EventBridge (cross-account events)     │ │
-│  │                    Cognito (IAM Identity Center SSO)      │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
-         │ cross-account IAM roles
-         ▼
-┌─ Workload OU ────────────────────────────────────────────────┐
-│  {BU}-Prod Account                                            │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ Bedrock AgentCore Runtime                                │ │
-│  │   Agent A ──→ Harbor API (register, heartbeat, discover) │ │
-│  │   Agent B ──→ Harbor API (policy check, communicate)     │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Runtimes["Agent Runtimes (any cloud)"]
+        direction LR
+        AWS_RT["AWS Bedrock<br/>AgentCore"]
+        AZ_RT["Azure AI<br/>Agent Service"]
+        GCP_RT["Google<br/>Vertex AI"]
+        CUSTOM["On-Prem /<br/>Custom"]
+    end
+
+    subgraph Harbor["Harbor Central (AWS Serverless)"]
+        CF["CloudFront + WAF"]
+        APIGW["API Gateway<br/>HTTP API"]
+        FN["Lambda<br/>FastAPI + Mangum"]
+        DB["DynamoDB<br/>Single-Table"]
+        EB["EventBridge"]
+        COG["Cognito"]
+    end
+
+    subgraph Consumers["Consumers"]
+        direction LR
+        UI["Harbor UI<br/>React SPA"]
+        CLI["Harbor CLI"]
+        SDK["Agent SDK /<br/>Direct API"]
+    end
+
+    AWS_RT -- "register / heartbeat / discover" --> CF
+    AZ_RT -- "register / heartbeat / discover" --> CF
+    GCP_RT -- "register / heartbeat / discover" --> CF
+    CUSTOM -- "register / heartbeat / discover" --> CF
+
+    CF --> APIGW --> FN
+    FN --> DB
+    FN --> EB
+    FN --> COG
+
+    UI --> CF
+    CLI --> CF
+    SDK --> CF
+
+    style Harbor fill:#0f172a,stroke:#3b82f6,color:#e2e8f0
+    style Runtimes fill:#1e293b,stroke:#64748b,color:#e2e8f0
+    style Consumers fill:#1e293b,stroke:#64748b,color:#e2e8f0
 ```
 
 ### Component Breakdown
@@ -56,6 +75,104 @@ Harbor is an agent platform management system that brings API Management (APIM) 
 | **DynamoDB** | Single-table, PAY_PER_REQUEST, point-in-time recovery enabled. |
 | **Cognito** | User pool with JWT issuance. Federated with IAM Identity Center for SSO. |
 | **EventBridge** | `harbor-events` bus for lifecycle events, policy violations, cross-account routing. |
+
+## Agent Onboarding Flow
+
+Operators deploy agents with their own tools, then register metadata with Harbor:
+
+```mermaid
+sequenceDiagram
+    participant Op as Operator
+    participant Cloud as Any Cloud Runtime
+    participant H as Harbor API
+    participant Rev as Reviewer
+
+    Op->>Cloud: Deploy agent (Terraform / CDK / ARM / gcloud)
+    Cloud-->>Op: Agent running ✓
+
+    Op->>H: POST /agents {runtime, endpoint, compliance, capabilities}
+    H-->>Op: lifecycle: draft
+
+    Op->>H: PUT /agents/{id}/lifecycle?target=submitted
+    H-->>Rev: Pending review notification
+
+    Rev->>H: POST /reviews/{id}?action=approve
+    H-->>H: lifecycle: approved → published
+
+    Cloud->>H: PUT /agents/{id}/health (periodic heartbeat)
+    Cloud->>H: GET /discover/capability/summarization
+    H-->>Cloud: Best matching published agent
+```
+
+## Agent Data Model
+
+The "agent passport" — metadata an operator submits to Harbor:
+
+```mermaid
+classDiagram
+    class AgentRecord {
+        +agent_id: str
+        +name: str
+        +version: str
+        +tenant_id: str
+        +owner: OwnerInfo
+        +lifecycle_status: AgentLifecycle
+        +visibility: Visibility
+        +runtime: RuntimeOrigin
+        +endpoint: EndpointInfo
+        +capabilities: list~str~
+        +skills: list~AgentSkill~
+        +dependencies: DependencyInfo
+        +compliance: ComplianceInfo
+    }
+
+    class RuntimeOrigin {
+        +provider: aws | azure | gcp | on-prem
+        +runtime: str
+        +region: str
+        +account_id: str
+        +resource_id: str
+    }
+
+    class EndpointInfo {
+        +url: str
+        +protocol: http | grpc | a2a | mcp
+        +auth_type: str
+        +health_check_path: str
+    }
+
+    class ComplianceInfo {
+        +data_residency: list~str~
+        +certifications: list~str~
+        +data_classification: str
+        +pii_handling: bool
+    }
+
+    class DependencyInfo {
+        +required_agents: list~str~
+        +required_tools: list~str~
+        +models: list~str~
+    }
+
+    AgentRecord --> RuntimeOrigin
+    AgentRecord --> EndpointInfo
+    AgentRecord --> ComplianceInfo
+    AgentRecord --> DependencyInfo
+```
+
+### Registration Requirements
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `agent_id`, `name` | Yes | Identity |
+| `tenant_id`, `owner` | Yes | Multi-tenant scoping |
+| `runtime` | No | Defaults to `provider: aws`. Fill for cross-cloud visibility. |
+| `endpoint` | No | Required for discovery to be useful. |
+| `compliance` | No | Reviewers check this for prod approval. |
+| `dependencies` | No | Used for dependency graph and impact analysis. |
+| `capabilities` | No | Required for capability-based discovery. |
+
+Low barrier to register, rich metadata for governance review.
 
 ## Data Model
 
@@ -79,86 +196,59 @@ Table: `harbor-agent-registry`
 
 | GSI | PK | SK | Purpose |
 |-----|----|----|---------|
-| `status-index` | `status` | `updated_at` | Query agents by operational status |
+| `status-index` | `status` | `updated_at` | Query by operational status |
 | `tenant-index` | `tenant_id` | `updated_at` | List all entities for a tenant |
-| `lifecycle-index` | `lifecycle_status` | `updated_at` | Query agents by lifecycle phase |
-
-### Table Rules
-
-- All items have `pk` and `sk` fields.
-- All agent items prefixed with `TENANT#{tenant_id}#`.
-- Timestamps are ISO 8601 UTC strings.
-- Billing mode: `PAY_PER_REQUEST`.
-- Point-in-time recovery: enabled.
-- TTL field: `ttl` (Unix epoch seconds) — used for audit log expiry.
-
-### Agent Record Schema
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `agent_id` | string | Unique identifier (slug format) |
-| `name` | string | Human-readable display name |
-| `description` | string | What this agent does |
-| `version` | string | Semantic version (e.g., `1.2.0`) |
-| `tenant_id` | string | AWS account ID of the owning account |
-| `owner` | string | Email or IAM principal of the agent owner |
-| `visibility` | enum | `private`, `ou_shared`, `org_wide` |
-| `lifecycle_status` | enum | Current lifecycle state (see below) |
-| `status` | enum | Operational status: `active`, `inactive`, `maintenance` |
-| `capabilities` | list[string] | What the agent can do (e.g., `["nlp", "summarize"]`) |
-| `phase_affinity` | list[string] | Lifecycle phases where this agent operates |
-| `routing_rules` | object | Load balancing and failover configuration |
-| `endpoint` | string | Agent runtime endpoint URL |
-| `a2a_card_url` | string | URL to the agent's A2A Agent Card |
-| `tags` | dict | Arbitrary key-value metadata |
-| `created_at` | string | ISO 8601 creation timestamp |
-| `updated_at` | string | ISO 8601 last-modified timestamp |
+| `lifecycle-index` | `lifecycle_status` | `updated_at` | Query by lifecycle phase |
 
 ## Multi-Tenant Model
 
-### Tenant Hierarchy
+### Tenant Identity (Cloud-Agnostic)
 
-```
-Org (AWS Organization)
-└── Business Unit (OU)
-    └── Project (Account)
-        └── Environment (account tag: dev / staging / prod)
-```
+| Cloud | tenant_id | Example |
+|-------|-----------|---------|
+| AWS | Account ID | `123456789012` |
+| Azure | Subscription ID | `a1b2c3d4-...` |
+| GCP | Project ID | `my-project-123` |
+| On-prem | Org-assigned | `corp-team-alpha` |
 
-- `tenant_id` = AWS Account ID of the caller.
-- Harbor maps account ID → org/OU/project via Control Tower metadata.
-- All DynamoDB queries include `tenant_id` in the key condition — no cross-tenant data leaks by construction.
+All DynamoDB queries include `tenant_id` in the key condition — no cross-tenant data leaks by construction.
 
 ### Visibility Scopes
 
 | Scope | Who Can See | Use Case |
 |-------|-------------|----------|
-| `private` | Same account only | Dev/draft agents |
-| `ou_shared` | Same OU (business unit) | Shared within a department |
+| `private` | Same tenant only | Dev/draft agents |
+| `ou_shared` | Same business unit | Shared within a department |
 | `org_wide` | Entire organization | Compliance agents, shared utilities |
-
-Discovery queries respect visibility: an agent in account A with `private` visibility is invisible to account B, even if B searches for the same capability.
 
 ## Agent Lifecycle
 
+```mermaid
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Submitted
+    Submitted --> InReview: reviewer picks up
+    InReview --> Approved: passes review
+    InReview --> Draft: rejected
+    Approved --> Published
+    Published --> Suspended: emergency kill switch
+    Published --> Deprecated: sunset announced
+    Suspended --> Published: reinstated
+    Suspended --> Deprecated
+    Deprecated --> Retired
+    Deprecated --> Published: un-deprecate
+    Retired --> [*]
 ```
-Draft → Submitted → In Review → Approved → Published → [Suspended] → Deprecated → Retired
-                        │
-                   Rejected → Draft
-```
-
-### State Definitions
 
 | State | Description |
 |-------|-------------|
-| `draft` | Initial state. Agent is registered but not visible. Owner can edit freely. |
-| `submitted` | Owner has requested promotion. Awaiting review. |
-| `in_review` | A reviewer has picked up the submission. |
+| `draft` | Registered but not visible. Owner can edit freely. |
+| `submitted` | Owner requests promotion. Awaiting review. |
+| `in_review` | Reviewer has picked up the submission. |
 | `approved` | All required approvals received. Ready to publish. |
-| `rejected` | Review failed. Returns to `draft` with reviewer comments. |
-| `published` | Live and discoverable. Only published agents appear in discovery results. |
-| `suspended` | Emergency kill switch. Any admin can trigger. Agent is immediately undiscoverable. |
-| `deprecated` | Sunset announced. Requires a sunset date. Dependents are notified via EventBridge. |
+| `published` | Live and discoverable. Only state visible in discovery. |
+| `suspended` | Emergency kill switch. Immediately undiscoverable. |
+| `deprecated` | Sunset announced. Dependents notified via EventBridge. |
 | `retired` | Archived. Removed from discovery. Record retained for audit. |
 
 ### Approval Policy by Environment
@@ -169,13 +259,9 @@ Draft → Submitted → In Review → Approved → Published → [Suspended] →
 | `staging` | 1 approval from `project_admin` |
 | `prod` | 2 approvals: `risk_officer` + `compliance_officer` |
 
-Every lifecycle transition is recorded in the audit log with actor, timestamp, and reason.
-
 ## Runtime Policies
 
 ### Capability Boundaries
-
-Control what tools, APIs, and MCP servers each agent can access:
 
 ```yaml
 tools:
@@ -185,66 +271,102 @@ tools:
 mcp_servers:
   allowed: ["internal-kb", "market-data"]
   denied: ["external-*"]
-apis:
-  allowed: ["https://internal.api/*"]
-  denied: ["https://external.api/*"]
 data_classification:
   max_level: "confidential"
 ```
 
-Evaluation logic: `denied` takes precedence over `allowed`. Wildcard patterns supported. `require_human` triggers a human-in-the-loop approval before the tool invocation proceeds.
+`denied` takes precedence over `allowed`. Wildcard patterns supported.
 
 ### Communication ACL
 
-Control which agents can talk to each other. Default mode is allowlist (deny-all unless explicitly permitted) — designed for regulated environments like financial services.
+Default mode: allowlist (deny-all unless explicitly permitted).
 
 ```yaml
-default_action: deny
 rules:
   - from: "trading-agent"
     to: "risk-assessment-agent"
     allowed: true
-    required: true          # must call risk before acting
+    required: true
   - from: "external-*"
     to: "internal-*"
-    allowed: false          # external agents blocked from internal
-  - from: "support-agent"
-    to: "knowledge-base-agent"
-    allowed: true
-    conditions:
-      time_window: "business_hours"
+    allowed: false
 ```
 
-Rules are evaluated top-to-bottom. First match wins. If no rule matches, `default_action` applies.
+First match wins. No match → default deny.
 
 ### Schedule Windows
-
-Control when agents can operate:
 
 ```yaml
 active_windows:
   - cron: "0 9-16 * * MON-FRI"
     timezone: "Asia/Taipei"
-    label: "Business hours"
-blackout_windows:
-  - start: "2025-12-25T00:00:00Z"
-    end: "2025-12-26T00:00:00Z"
-    label: "Holiday freeze"
-out_of_window_action: "reject"   # or "queue", "alert"
+out_of_window_action: "reject"
 ```
 
-Blackout windows override active windows. `out_of_window_action` determines behavior when an agent attempts to operate outside its schedule.
+### Policy Evaluation Flow
+
+```mermaid
+flowchart TD
+    REQ["Agent A wants to call Agent B"] --> COMM{"Communication ACL"}
+    COMM -- denied --> DENY["❌ Denied"]
+    COMM -- allowed --> SCHED{"Schedule Window"}
+    SCHED -- outside window --> DENY
+    SCHED -- in window --> CAP{"Capability Boundary"}
+    CAP -- denied resource --> DENY
+    CAP -- allowed --> OK["✅ Allowed"]
+
+    DENY --> EVT["Emit PolicyViolation event"]
+```
+
+## Three-Layer Architecture
+
+```mermaid
+flowchart TD
+    subgraph API["API Layer (FastAPI Routers)"]
+        A1["agents.py"]
+        A2["discovery.py"]
+        A3["policies.py"]
+        A4["health.py"]
+        A5["audit.py"]
+        A6["reviews.py"]
+    end
+
+    subgraph SVC["Service Layer (Business Logic)"]
+        S1["RegistryService"]
+        S2["DiscoveryService"]
+        S3["PolicyService"]
+        S4["HealthService"]
+        S5["AuditService"]
+    end
+
+    subgraph STORE["Store Layer (DynamoDB)"]
+        D1["AgentStore"]
+        D2["PolicyStore"]
+        D3["HealthStore"]
+        D4["AuditStore"]
+        D5["VersionStore"]
+    end
+
+    API --> SVC --> STORE --> DB[(DynamoDB)]
+
+    EVT["EventEmitter"] -.-> EB[(EventBridge)]
+    S1 --> EVT
+    S3 --> EVT
+
+    style API fill:#1e40af,stroke:#3b82f6,color:#e2e8f0
+    style SVC fill:#065f46,stroke:#10b981,color:#e2e8f0
+    style STORE fill:#92400e,stroke:#f59e0b,color:#e2e8f0
+```
+
+### Rules
+
+- **API → Service → Store → DynamoDB**. No shortcuts.
+- `store/` is the only layer that imports `boto3` for DynamoDB.
+- `events/emitter.py` is the only layer that imports `boto3` for EventBridge.
+- Services raise domain exceptions; the API layer maps them to HTTP status codes.
+- All dependencies injected via constructors. `main.py` is the composition root.
 
 ## Authentication & Authorization
-
-### Cognito User Pool
-
-- Self-signup disabled (admin-created accounts only).
-- Email as username.
-- Custom attributes: `custom:tenant_id`, `custom:role`.
-- JWT issued on login, validated by API Gateway authorizer and FastAPI middleware.
-
-### Role-Based Access Control
 
 | Role | Permissions |
 |------|-------------|
@@ -255,56 +377,16 @@ Blackout windows override active windows. `out_of_window_action` determines beha
 | `compliance_officer` | Approve prod deployments (compliance sign-off) |
 | `admin` | Full access. Suspend/retire any agent. Manage policies. |
 
-### Dev Bypass Mode
-
-When `HARBOR_AUTH_DISABLED=true` (local development only), the auth middleware injects a default tenant context:
-
-```python
-TenantContext(tenant_id="dev-tenant", role="admin", owner="dev@harbor.local")
-```
-
-### Machine-to-Machine Auth
-
-Cross-account agents authenticate via Cognito client credentials flow. The client's `tenant_id` is mapped from the originating AWS account's IAM role.
-
 ## Event System
 
-### EventBridge Bus
+Bus: `harbor-events`
 
-Bus name: `harbor-events`
+| Event Type | Trigger |
+|------------|---------|
+| `AgentLifecycleChanged` | Any lifecycle state transition |
+| `PolicyViolation` | Agent attempts a denied action |
 
-| Event Type | Source | Trigger |
-|------------|--------|---------|
-| `AgentLifecycleChanged` | `harbor.registry` | Any lifecycle state transition |
-| `AgentHealthChanged` | `harbor.health` | Health status change (healthy → unhealthy) |
-| `PolicyViolation` | `harbor.policy` | Agent attempts a denied action |
-| `AgentRegistered` | `harbor.registry` | New agent registered |
-| `AgentRetired` | `harbor.registry` | Agent moved to retired state |
-
-### Event Schema
-
-```json
-{
-  "source": "harbor.registry",
-  "detail-type": "AgentLifecycleChanged",
-  "detail": {
-    "tenant_id": "123456789012",
-    "agent_id": "trading-agent",
-    "from_status": "approved",
-    "to_status": "published",
-    "actor": "admin@example.com",
-    "timestamp": "2025-01-15T10:30:00Z"
-  }
-}
-```
-
-### Cross-Account Event Policy
-
-Workload accounts can emit events to the Harbor bus via cross-account EventBridge policy. Harbor Central processes these events for health aggregation and audit logging.
-
-### SNS Alerts
-
-Critical events (`PolicyViolation`, `suspended` transitions) fan out to an SNS topic for email/Slack/PagerDuty integration.
+Events are emitted to EventBridge for cross-account routing, SNS fan-out, and Security Hub integration.
 
 ## Control Tower Integration
 
@@ -312,46 +394,10 @@ Harbor deploys into existing Control Tower landing zones as a Shared Services wo
 
 | Integration | Purpose |
 |-------------|---------|
-| **StackSet template** | Auto-provisions `harbor-agent-reporter` IAM role in workload accounts via CT Account Factory |
-| **SCP guardrails** | Protects Harbor Central resources, enforces agent tagging in workload accounts |
-| **Cross-account IAM** | Workload agents assume role to call Harbor API with their account identity |
-| **IAM Identity Center SSO** | Cognito SAML federation with enterprise IdP for console and CLI access |
-| **Security Hub** | Custom findings for policy violations and unapproved agents running in production |
-| **Config Rules** | Compliance checks: all agents in workload accounts must be registered in Harbor |
+| **StackSet template** | Auto-provisions IAM role in workload accounts |
+| **SCP guardrails** | Protects Harbor Central resources |
+| **Cross-account IAM** | Workload agents assume role to call Harbor API |
+| **IAM Identity Center SSO** | Cognito SAML federation with enterprise IdP |
+| **Security Hub** | Custom findings for policy violations |
 
 See [enterprise-integration-guide.md](enterprise-integration-guide.md) for the full deployment runbook.
-
-## Data Flow
-
-### Three-Layer Separation
-
-```
-API Route (FastAPI)
-  │  HTTP concerns: request parsing, response formatting, error codes
-  ▼
-Service Layer (registry, discovery, health, audit, policy)
-  │  Business logic: validation, orchestration, side effects
-  ▼
-Store Layer (DynamoDB)
-  │  Persistence: serialization, queries, error handling
-  ▼
-DynamoDB Table
-```
-
-Rules:
-- **API → Service → Store → DynamoDB**. No shortcuts.
-- `store/` is the only layer that imports `boto3`.
-- `policy/` is the only layer that evaluates governance rules.
-- Services raise domain exceptions; the API layer maps them to HTTP status codes.
-- Frontend calls API Gateway, which invokes Lambda. Frontend never touches DynamoDB.
-
-### Cross-Account Data Flow
-
-```
-Workload Account Agent
-  → assumes harbor-agent-reporter IAM role
-  → calls Harbor API Gateway (HTTPS)
-  → API GW validates Cognito JWT / IAM auth
-  → Lambda extracts tenant_id from caller identity
-  → DynamoDB query scoped to tenant_id
-```

@@ -1,119 +1,103 @@
 """Unit tests for the policy enforcement service."""
 
+from unittest.mock import MagicMock
+
 import pytest
+from moto import mock_aws
 
 from harbor.models.policy import CapabilityPolicy, CommunicationRule, ResourcePermission
-from harbor.policy.service import PolicyDecision, PolicyService
+from harbor.policy.service import PolicyService
+from harbor.store.policy_store import PolicyStore
+from harbor.store.audit_store import AuditStore
+from tests.unit.conftest import TABLE_NAME, _create_table
 
 TENANT = "tenant-001"
 
 
 @pytest.fixture
-def policy_svc(store):
-    return PolicyService(store)
+def setup():
+    with mock_aws():
+        _create_table(TABLE_NAME)
+        kwargs = {"table_name": TABLE_NAME, "region": "us-east-1"}
+        store = PolicyStore(**kwargs)
+        audit = AuditStore(**kwargs)
+        svc = PolicyService(store, audit, events=MagicMock())
+        yield store, svc
 
 
 # ── Capability tests ──────────────────────────────────────
 
 
-def test_capability_allowed(store, policy_svc):
+def test_capability_allowed(setup):
+    store, svc = setup
     store.put_capability_policy(
-        CapabilityPolicy(
-            agent_id="agent-1",
-            tenant_id=TENANT,
-            tools=ResourcePermission(allowed=["db_query"]),
-        )
+        CapabilityPolicy(agent_id="agent-1", tenant_id=TENANT, tools=ResourcePermission(allowed=["db_query"]))
     )
-    result = policy_svc.check_capability(TENANT, "agent-1", "tools", "db_query")
-    assert result.allowed is True
+    assert svc.check_capability(TENANT, "agent-1", "tools", "db_query").allowed is True
 
 
-def test_capability_denied(store, policy_svc):
+def test_capability_denied(setup):
+    store, svc = setup
     store.put_capability_policy(
-        CapabilityPolicy(
-            agent_id="agent-1",
-            tenant_id=TENANT,
-            tools=ResourcePermission(denied=["execute_trade"]),
-        )
+        CapabilityPolicy(agent_id="agent-1", tenant_id=TENANT, tools=ResourcePermission(denied=["execute_trade"]))
     )
-    result = policy_svc.check_capability(TENANT, "agent-1", "tools", "execute_trade")
-    assert result.allowed is False
+    assert svc.check_capability(TENANT, "agent-1", "tools", "execute_trade").allowed is False
 
 
-def test_capability_wildcard_deny(store, policy_svc):
+def test_capability_wildcard_deny(setup):
+    store, svc = setup
     store.put_capability_policy(
-        CapabilityPolicy(
-            agent_id="agent-1",
-            tenant_id=TENANT,
-            tools=ResourcePermission(denied=["external-*"]),
-        )
+        CapabilityPolicy(agent_id="agent-1", tenant_id=TENANT, tools=ResourcePermission(denied=["external-*"]))
     )
-    result = policy_svc.check_capability(TENANT, "agent-1", "tools", "external-api")
-    assert result.allowed is False
+    assert svc.check_capability(TENANT, "agent-1", "tools", "external-api").allowed is False
 
 
-def test_capability_not_in_allowed_list(store, policy_svc):
+def test_capability_not_in_allowed_list(setup):
+    store, svc = setup
     store.put_capability_policy(
-        CapabilityPolicy(
-            agent_id="agent-1",
-            tenant_id=TENANT,
-            tools=ResourcePermission(allowed=["db_query"]),
-        )
+        CapabilityPolicy(agent_id="agent-1", tenant_id=TENANT, tools=ResourcePermission(allowed=["db_query"]))
     )
-    result = policy_svc.check_capability(TENANT, "agent-1", "tools", "send_email")
-    assert result.allowed is False
+    assert svc.check_capability(TENANT, "agent-1", "tools", "send_email").allowed is False
 
 
-def test_capability_no_policy(policy_svc):
-    result = policy_svc.check_capability(TENANT, "agent-1", "tools", "anything")
-    assert result.allowed is True
+def test_capability_no_policy(setup):
+    _, svc = setup
+    assert svc.check_capability(TENANT, "agent-1", "tools", "anything").allowed is True
 
 
 # ── Communication tests ───────────────────────────────────
 
 
-def test_communication_allowed(store, policy_svc):
-    store.put_communication_rule(
-        CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=True)
-    )
-    result = policy_svc.check_communication("agent-a", "agent-b")
-    assert result.allowed is True
+def test_communication_allowed(setup):
+    store, svc = setup
+    store.put_communication_rule(CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=True))
+    assert svc.check_communication("agent-a", "agent-b").allowed is True
 
 
-def test_communication_denied(store, policy_svc):
-    store.put_communication_rule(
-        CommunicationRule(rule_id="r1", from_agent="*", to_agent="internal-*", allowed=False)
-    )
-    result = policy_svc.check_communication("ext", "internal-db")
-    assert result.allowed is False
+def test_communication_denied(setup):
+    store, svc = setup
+    store.put_communication_rule(CommunicationRule(rule_id="r1", from_agent="*", to_agent="internal-*", allowed=False))
+    assert svc.check_communication("ext", "internal-db").allowed is False
 
 
-def test_communication_no_rules(policy_svc):
-    result = policy_svc.check_communication("agent-a", "agent-b")
-    assert result.allowed is True
+def test_communication_no_rules(setup):
+    _, svc = setup
+    assert svc.check_communication("agent-a", "agent-b").allowed is True
 
 
 # ── Evaluate (combined) tests ─────────────────────────────
 
 
-def test_evaluate_all_pass(store, policy_svc):
-    store.put_communication_rule(
-        CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=True)
-    )
+def test_evaluate_all_pass(setup):
+    store, svc = setup
+    store.put_communication_rule(CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=True))
     store.put_capability_policy(
-        CapabilityPolicy(
-            agent_id="agent-b",
-            tenant_id=TENANT,
-            tools=ResourcePermission(allowed=["db_query"]),
-        )
+        CapabilityPolicy(agent_id="agent-b", tenant_id=TENANT, tools=ResourcePermission(allowed=["db_query"]))
     )
-    result = policy_svc.evaluate(TENANT, "agent-a", "agent-b", "tools", "db_query")
-    assert result.allowed is True
+    assert svc.evaluate(TENANT, "agent-a", "agent-b", "tools", "db_query").allowed is True
 
 
-def test_evaluate_comm_denied(store, policy_svc):
-    store.put_communication_rule(
-        CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=False)
-    )
-    result = policy_svc.evaluate(TENANT, "agent-a", "agent-b")
-    assert result.allowed is False
+def test_evaluate_comm_denied(setup):
+    store, svc = setup
+    store.put_communication_rule(CommunicationRule(rule_id="r1", from_agent="agent-a", to_agent="agent-b", allowed=False))
+    assert svc.evaluate(TENANT, "agent-a", "agent-b").allowed is False
