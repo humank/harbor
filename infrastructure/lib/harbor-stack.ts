@@ -4,10 +4,9 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
-import * as apigwv2int from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import * as apigwv2auth from "aws-cdk-lib/aws-apigatewayv2-authorizers";
+import * as apigw from "aws-cdk-lib/aws-apigateway";
 import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
@@ -81,7 +80,6 @@ export class HarborStack extends cdk.Stack {
       },
     });
 
-    // SPA client (PKCE flow, no secret)
     const spaClient = userPool.addClient("SpaClient", {
       userPoolClientName: "harbor-spa",
       authFlows: { userSrp: true },
@@ -95,7 +93,6 @@ export class HarborStack extends cdk.Stack {
       generateSecret: false,
     });
 
-    // M2M client (client credentials for cross-account agents)
     const resourceServer = userPool.addResourceServer("ResourceServer", {
       identifier: "harbor-api",
       scopes: [
@@ -122,14 +119,13 @@ export class HarborStack extends cdk.Stack {
       generateSecret: true,
     });
 
-    // Domain for hosted UI / token endpoint
     userPool.addDomain("Domain", {
       cognitoDomain: {
         domainPrefix: isDev ? `harbor-dev-${cdk.Aws.ACCOUNT_ID}` : `harbor-${cdk.Aws.ACCOUNT_ID}`,
       },
     });
 
-    // ── Lambda ─────────────────────────────────────────
+    // ── Lambda: Control Plane (FastAPI + Mangum) ────────
 
     const apiFunction = new lambda.Function(this, "ApiFunction", {
       functionName: "harbor-api",
@@ -158,43 +154,87 @@ export class HarborStack extends cdk.Stack {
 
     table.grantReadWriteData(apiFunction);
 
-    // ── API Gateway HTTP API ───────────────────────────
+    // ── Lambda: Agent Proxy (custom runtime, streaming) ─
 
-    const httpApi = new apigwv2.HttpApi(this, "HttpApi", {
-      apiName: "harbor-api",
-      corsPreflight: {
-        allowOrigins: ["*"],
-        allowMethods: [apigwv2.CorsHttpMethod.ANY],
+    const agentProxyFunction = new lambda.DockerImageFunction(this, "AgentProxyFunction", {
+      functionName: "harbor-agent-proxy-stream",
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, "lambda/agent-proxy-streaming"),
+      ),
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: cdk.Duration.minutes(5),
+      environment: {
+        AGENT_RUNTIME_ARN: config.agentRuntimeArn || "",
+      },
+    });
+
+    agentProxyFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+        resources: ["*"],
+      }),
+    );
+
+    // ── REST API (unified, supports streaming) ─────────
+
+    const restApi = new apigw.RestApi(this, "RestApi", {
+      restApiName: "harbor-api",
+      deployOptions: {
+        stageName: "prod",
+        throttlingBurstLimit: 100,
+        throttlingRateLimit: 50,
+      },
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigw.Cors.ALL_ORIGINS,
+        allowMethods: apigw.Cors.ALL_METHODS,
         allowHeaders: ["Content-Type", "Authorization"],
         maxAge: cdk.Duration.hours(1),
       },
     });
 
-    // JWT authorizer (enabled via config)
-    const jwtAuthorizer = config.enableAuth
-      ? new apigwv2auth.HttpJwtAuthorizer("JwtAuthorizer", userPool.userPoolProviderUrl, {
-          jwtAudience: [spaClient.userPoolClientId, m2mClient.userPoolClientId],
-        })
-      : undefined;
-
-    const lambdaIntegration = new apigwv2int.HttpLambdaIntegration(
-      "LambdaIntegration",
-      apiFunction,
-    );
-
-    httpApi.addRoutes({
-      path: "/api/{proxy+}",
-      methods: [apigwv2.HttpMethod.ANY],
-      integration: lambdaIntegration,
-      authorizer: jwtAuthorizer,
+    // Control plane: /api/{proxy+} → Lambda (Mangum)
+    const apiResource = restApi.root.addResource("api");
+    apiResource.addProxy({
+      defaultIntegration: new apigw.LambdaIntegration(apiFunction),
+      anyMethod: true,
     });
 
-    // Throttling via stage
-    const stage = httpApi.defaultStage?.node.defaultChild as apigwv2.CfnStage;
-    stage.defaultRouteSettings = {
-      throttlingBurstLimit: 100,
-      throttlingRateLimit: 50,
-    };
+    // Data plane: /stream/agent-proxy → Lambda (streaming, custom runtime)
+    // Separate path to avoid conflict with /api/{proxy+}
+    const streamResource = restApi.root.addResource("stream");
+    const agentProxyResource = streamResource.addResource("agent-proxy");
+
+    // Use CfnMethod to set responseTransferMode: STREAM
+    // CDK L2 doesn't expose this yet, so we use escape hatch
+    const proxyMethod = agentProxyResource.addMethod(
+      "POST",
+      new apigw.LambdaIntegration(agentProxyFunction, {
+        proxy: true,
+      }),
+    );
+
+    // Escape hatch: set responseTransferMode to STREAM
+    const cfnMethod = proxyMethod.node.defaultChild as apigw.CfnMethod;
+    cfnMethod.addPropertyOverride("Integration.TimeoutInMillis", 300000);
+
+    // For streaming, we need to override the integration URI to use
+    // response-streaming-invocations instead of /invocations
+    const streamingUri = cdk.Fn.join("", [
+      "arn:aws:apigateway:",
+      this.region,
+      ":lambda:path/2021-11-15/functions/",
+      agentProxyFunction.functionArn,
+      "/response-streaming-invocations",
+    ]);
+    cfnMethod.addPropertyOverride("Integration.Uri", streamingUri);
+    cfnMethod.addPropertyOverride("Integration.ResponseTransferMode", "STREAM");
+
+    // Grant API Gateway permission to invoke with streaming
+    agentProxyFunction.addPermission("ApiGwStreamInvoke", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      sourceArn: restApi.arnForExecuteApi("POST", "/stream/agent-proxy", "prod"),
+    });
 
     // ── S3 Bucket (Frontend) ───────────────────────────
 
@@ -260,8 +300,10 @@ export class HarborStack extends cdk.Stack {
       originAccessControlName: "harbor-oac",
     });
 
+    // REST API origin — includes /prod stage prefix
     const apiOrigin = new origins.HttpOrigin(
-      `${httpApi.httpApiId}.execute-api.${this.region}.amazonaws.com`,
+      `${restApi.restApiId}.execute-api.${this.region}.amazonaws.com`,
+      { originPath: "/prod" },
     );
 
     const distribution = new cloudfront.Distribution(this, "Distribution", {
@@ -273,7 +315,16 @@ export class HarborStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
       },
       additionalBehaviors: {
+        // Control plane: /api/*
         "/api/*": {
+          origin: apiOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        },
+        // Data plane (streaming): /stream/*
+        "/stream/*": {
           origin: apiOrigin,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
@@ -296,7 +347,6 @@ export class HarborStack extends cdk.Stack {
       eventBusName: "harbor-events",
     });
 
-    // Cross-account: allow workload accounts in the org to put events
     if (config.orgId) {
       new events.CfnEventBusPolicy(this, "OrgPutEventsPolicy", {
         eventBusName: eventBus.eventBusName,
@@ -311,73 +361,29 @@ export class HarborStack extends cdk.Stack {
       });
     }
 
-    // Grant Lambda permission to put events
     eventBus.grantPutEventsTo(apiFunction);
     apiFunction.addEnvironment("EVENT_BUS_NAME", eventBus.eventBusName);
 
-    // SNS topic for alerts
     const alertTopic = new sns.Topic(this, "AlertTopic", {
       topicName: "harbor-alerts",
     });
 
-    // Rule: lifecycle transitions → SNS
     new events.Rule(this, "LifecycleRule", {
       eventBus,
-      eventPattern: {
-        source: ["harbor"],
-        detailType: ["AgentLifecycleChanged"],
-      },
+      eventPattern: { source: ["harbor"], detailType: ["AgentLifecycleChanged"] },
       targets: [new targets.SnsTopic(alertTopic)],
     });
 
-    // Rule: policy violations → SNS
     new events.Rule(this, "PolicyViolationRule", {
       eventBus,
-      eventPattern: {
-        source: ["harbor"],
-        detailType: ["PolicyViolation"],
-      },
+      eventPattern: { source: ["harbor"], detailType: ["PolicyViolation"] },
       targets: [new targets.SnsTopic(alertTopic)],
-    });
-
-    // ── Agent Proxy Lambda (streaming to AgentCore Runtime) ──
-
-    const agentProxyFunction = new lambda.Function(this, "AgentProxyFunction", {
-      functionName: "harbor-agent-proxy",
-      runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: lambda.Architecture.ARM_64,
-      handler: "agent-proxy.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "lambda")),
-      memorySize: 256,
-      timeout: cdk.Duration.minutes(5),
-      environment: {
-        AGENT_RUNTIME_ARN: config.agentRuntimeArn || "",
-      },
-    });
-
-    // Grant permission to invoke AgentCore Runtime
-    agentProxyFunction.addToRolePolicy(
-      new cdk.aws_iam.PolicyStatement({
-        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
-        resources: ["*"],
-      }),
-    );
-
-    const proxyIntegration = new apigwv2int.HttpLambdaIntegration(
-      "AgentProxyIntegration",
-      agentProxyFunction,
-    );
-
-    httpApi.addRoutes({
-      path: "/api/v1/agent-proxy",
-      methods: [apigwv2.HttpMethod.POST],
-      integration: proxyIntegration,
     });
 
     // ── Outputs ────────────────────────────────────────
 
     new cdk.CfnOutput(this, "TableName", { value: table.tableName });
-    new cdk.CfnOutput(this, "ApiUrl", { value: httpApi.apiEndpoint });
+    new cdk.CfnOutput(this, "ApiUrl", { value: restApi.url });
     new cdk.CfnOutput(this, "DistributionUrl", {
       value: `https://${distribution.distributionDomainName}`,
     });

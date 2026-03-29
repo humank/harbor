@@ -1,0 +1,40 @@
+#!/usr/bin/env python3.12
+"""Custom runtime bootstrap for Lambda response streaming.
+
+Sets Lambda-Runtime-Function-Response-Mode: streaming so that
+yield-based handlers stream chunks back through API Gateway REST API.
+"""
+import os
+import sys
+import json
+import requests
+
+AWS_LAMBDA_RUNTIME_API = os.getenv("AWS_LAMBDA_RUNTIME_API")
+LAMBDA_TASK_ROOT = os.getenv("LAMBDA_TASK_ROOT", "/var/task")
+
+sys.path.insert(0, LAMBDA_TASK_ROOT)
+from app import handler  # noqa: E402
+
+NEXT_URL = f"http://{AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/next"
+RESP_URL = "http://{}/2018-06-01/runtime/invocation/{}/response"
+ERR_URL = "http://{}/2018-06-01/runtime/invocation/{}/error"
+STREAM_HEADERS = {
+    "Lambda-Runtime-Function-Response-Mode": "streaming",
+    "Transfer-Encoding": "chunked",
+    "Content-Type": "application/vnd.awslambda.http-integration-response",
+}
+
+while True:
+    resp = requests.get(NEXT_URL, timeout=900)
+    event = json.loads(resp.text)
+    invocation_id = resp.headers["Lambda-Runtime-Aws-Request-Id"]
+    response_url = RESP_URL.format(AWS_LAMBDA_RUNTIME_API, invocation_id)
+    error_url = ERR_URL.format(AWS_LAMBDA_RUNTIME_API, invocation_id)
+
+    try:
+        requests.post(response_url, headers=STREAM_HEADERS, data=handler(event, None))
+    except Exception as e:
+        requests.post(
+            error_url,
+            json={"errorMessage": str(e), "errorType": type(e).__name__},
+        )

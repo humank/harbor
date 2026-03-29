@@ -10,25 +10,38 @@ export interface ChatEntry {
 }
 
 /**
- * Hook for communicating with a Strands A2AServer via JSON-RPC streaming.
- * Strands A2AServer uses SendStreamingMessage (JSON-RPC over SSE).
+ * Hook for communicating with the Harbor agent-proxy via SSE streaming.
+ *
+ * The agent-proxy Lambda streams SSE events from AgentCore Runtime.
+ * Each `data:` line contains either an A2A JSON-RPC chunk or a raw text chunk.
+ * The stream ends with `data: [DONE]`.
  */
 export function useA2AStream() {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const contextIdRef = useRef<string>(crypto.randomUUID());
-  const taskIdRef = useRef<string | undefined>(undefined);
 
   const addEntry = (entry: ChatEntry) =>
     setEntries((prev) => [...prev, entry]);
+
+  const updateLastAgentEntry = (updater: (prev: string) => string) =>
+    setEntries((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'agent' && last.text !== undefined) {
+        return [...prev.slice(0, -1), { ...last, text: updater(last.text ?? '') }];
+      }
+      return prev;
+    });
 
   const sendMessage = useCallback(async (text: string) => {
     addEntry({ id: crypto.randomUUID(), role: 'user', text });
     setIsStreaming(true);
 
+    // Create a placeholder for the streaming agent response
+    addEntry({ id: crypto.randomUUID(), role: 'agent', text: '' });
+
     try {
-      const harborApi = import.meta.env.VITE_HARBOR_API_URL || '/api/v1';
-      const resp = await fetch(`${harborApi}/agent-proxy`, {
+      const resp = await fetch('/stream/agent-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -37,35 +50,54 @@ export function useA2AStream() {
         }),
       });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
 
-      // Agent proxy returns a complete A2A JSON-RPC response (not streaming)
-      const data = await resp.json();
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      // Check for A2A error
-      if (data.error) {
-        addEntry({ id: crypto.randomUUID(), role: 'agent', text: `❌ Agent 錯誤：${data.error.message || data.error}` });
-      } else {
-        // Extract text from A2A result artifacts
-        const result = data.result || data;
-        const artifacts = result.artifacts || [];
-        for (const art of artifacts) {
-          const parts = art.parts || [];
-          for (const part of parts) {
-            if (part.kind === 'text' && part.text) {
-              addEntry({ id: crypto.randomUUID(), role: 'agent', text: part.text });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+
+            // A2A JSON-RPC response — extract artifacts
+            if (parsed.result?.artifacts) {
+              for (const art of parsed.result.artifacts) {
+                for (const part of art.parts || []) {
+                  if (part.kind === 'text' && part.text) {
+                    updateLastAgentEntry(() => part.text);
+                  }
+                }
+              }
+              if (parsed.result.contextId) {
+                contextIdRef.current = parsed.result.contextId;
+              }
+            } else if (parsed.error) {
+              updateLastAgentEntry(() => `❌ Agent 錯誤：${parsed.error.message || JSON.stringify(parsed.error)}`);
+            } else {
+              // Raw text chunk — append to current response
+              updateLastAgentEntry((prev) => prev + (parsed.generation || parsed.text || JSON.stringify(parsed)));
             }
+          } catch {
+            // Not JSON — treat as raw text chunk, append
+            updateLastAgentEntry((prev) => prev + data);
           }
         }
-        if (artifacts.length === 0) {
-          // Fallback: try to display raw result
-          addEntry({ id: crypto.randomUUID(), role: 'agent', text: JSON.stringify(result, null, 2) });
-        }
-        // Update contextId from response
-        if (result.contextId) contextIdRef.current = result.contextId;
       }
     } catch (err) {
-      addEntry({ id: crypto.randomUUID(), role: 'agent', text: `❌ 連線錯誤：${err}` });
+      updateLastAgentEntry(() => `❌ 連線錯誤：${err}`);
     } finally {
       setIsStreaming(false);
     }
@@ -74,7 +106,6 @@ export function useA2AStream() {
   const reset = useCallback(() => {
     setEntries([]);
     contextIdRef.current = crypto.randomUUID();
-    taskIdRef.current = undefined;
   }, []);
 
   return { entries, isStreaming, sendMessage, reset };
