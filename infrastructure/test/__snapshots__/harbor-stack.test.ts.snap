@@ -216,7 +216,7 @@ exports[`Snapshot matches snapshot 1`] = `
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-east-1",
-          "S3Key": "fc2ce8594edfb9f69f68bf1017bdfb1655aec247f2c0ef40dab5305693fc1f62.zip",
+          "S3Key": "e4c6a1b1ec4b3f0536f7d76a124e73e99d1e2b44dc6393c82a732b41b4d334ea.zip",
         },
         "Environment": {
           "Variables": {
@@ -288,8 +288,6 @@ exports[`Snapshot matches snapshot 1`] = `
             {
               "Action": [
                 "dynamodb:BatchGetItem",
-                "dynamodb:GetRecords",
-                "dynamodb:GetShardIterator",
                 "dynamodb:Query",
                 "dynamodb:GetItem",
                 "dynamodb:Scan",
@@ -299,6 +297,35 @@ exports[`Snapshot matches snapshot 1`] = `
                 "dynamodb:UpdateItem",
                 "dynamodb:DeleteItem",
                 "dynamodb:DescribeTable",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AgentRegistryTableC52CC594",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AgentRegistryTableC52CC594",
+                          "Arn",
+                        ],
+                      },
+                      "/index/*",
+                    ],
+                  ],
+                },
+              ],
+            },
+            {
+              "Action": [
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
               ],
               "Effect": "Allow",
               "Resource": [
@@ -375,7 +402,7 @@ exports[`Snapshot matches snapshot 1`] = `
             "Arn",
           ],
         },
-        "Runtime": "nodejs20.x",
+        "Runtime": "nodejs22.x",
         "Timeout": 900,
       },
       "Type": "AWS::Lambda::Function",
