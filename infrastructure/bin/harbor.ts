@@ -6,8 +6,10 @@ import { devConfig } from "../lib/config";
 
 const app = new cdk.App();
 
+const agentRuntimeArn = app.node.tryGetContext("agentRuntimeArn") || "";
+
 new HarborStack(app, "HarborStack", {
-  config: devConfig,
+  config: { ...devConfig, agentRuntimeArn },
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",

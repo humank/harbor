@@ -293,6 +293,63 @@ harbor/
 └── docs/                    # Architecture, API reference, guides
 ```
 
+## Demo: Life Insurance Agent Platform
+
+A complete sample application demonstrating Harbor + A2A + Strands Agents + Bedrock AgentCore integration. Six AI agents collaborate via A2A v1.0 protocol, managed by Harbor's lifecycle governance.
+
+→ See full details in [samples/life-insurance/README.md](samples/life-insurance/README.md)
+
+### Agent Registry & Discovery
+
+```
+$ harbor list
+  explanation-agent              published    保險知識 Agent
+  recommendation-agent           published    推薦引擎 Agent
+  compliance-check-agent         published    合規檢查 Agent
+  premium-calculator-agent       published    保費試算 Agent
+  underwriting-risk-agent        published    風險預評估 Agent
+  product-catalog-agent          published    商品目錄 Agent
+
+$ harbor discover -c risk_assessment
+  underwriting-risk-agent        風險預評估 Agent
+```
+
+### Lifecycle Governance — Emergency Kill Switch
+
+```
+$ harbor lifecycle underwriting-risk-agent suspended --reason 'incident-1234'
+✓ underwriting-risk-agent → suspended
+
+$ harbor discover -c risk_assessment
+(empty — suspended agent is no longer discoverable!)
+```
+
+### A2A Agent Collaboration on AgentCore Runtime
+
+The Orchestrator agent coordinates multiple specialist agents (product search, premium calculation, risk assessment) to produce a complete insurance plan:
+
+```
+>>> Invoking Orchestrator Agent via A2A protocol on AgentCore Runtime...
+>>> Prompt: 我30歲，月預算3000元，想買醫療險，請幫我搜尋商品並試算保費
+
+<<< Agent Response (26.0s):
+
+## 搜尋結果與保費試算
+
+### 方案一：國泰真全意住院醫療險 ⭐推薦
+- 月保費：833元（住院日額 2,000元 / 手術限額 20萬元）
+
+### 方案二：富邦人生自由行醫療險
+- 月保費：977元（住院日額 2,500元 / 手術限額 25萬元）
+
+### 風險評估結果
+核保風險等級：「優體」，兩款商品都有15%的折扣。
+```
+
+### Frontend — Agent Status Dashboard
+
+![Harbor Insurance Demo Frontend](samples/life-insurance/docs/images/harbor-frontend-dashboard.png)
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) — system design, data model, lifecycle, policies

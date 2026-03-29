@@ -72,6 +72,7 @@ graph TB
 | **S3** | Static hosting for the React SPA. No public access — OAC only. |
 | **API Gateway (HTTP API)** | Routes `/api/*` to Lambda. Throttled at 100 req/s burst, 50 sustained. |
 | **Lambda** | Python 3.12 on ARM64 (Graviton). FastAPI app wrapped by Mangum. 256 MB, 30s timeout. |
+| **Agent Proxy Lambda** | Python 3.12 on ARM64. Proxies requests to AgentCore Runtime via `InvokeAgentRuntime` API. Wraps user prompts into A2A JSON-RPC `message/send` format. 256 MB, 5 min timeout. Route: `POST /api/v1/agent-proxy`. |
 | **DynamoDB** | Single-table, PAY_PER_REQUEST, point-in-time recovery enabled. |
 | **Cognito** | User pool with JWT issuance. Federated with IAM Identity Center for SSO. |
 | **EventBridge** | `harbor-events` bus for lifecycle events, policy violations, cross-account routing. |

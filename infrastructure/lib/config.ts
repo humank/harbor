@@ -3,6 +3,8 @@ export interface HarborConfig {
   environment: "dev" | "prod";
   enableAuth: boolean;
   orgId: string;
+  /** ARN of the orchestrator AgentCore Runtime (for agent proxy) */
+  agentRuntimeArn: string;
 }
 
 export const devConfig: HarborConfig = {
@@ -10,6 +12,7 @@ export const devConfig: HarborConfig = {
   environment: "dev",
   enableAuth: false,
   orgId: "",
+  agentRuntimeArn: "",
 };
 
 export const prodConfig: HarborConfig = {
@@ -17,4 +20,5 @@ export const prodConfig: HarborConfig = {
   environment: "prod",
   enableAuth: true,
   orgId: "",
+  agentRuntimeArn: "",
 };

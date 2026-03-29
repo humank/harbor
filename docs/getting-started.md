@@ -114,6 +114,46 @@ harbor health my-agent    # send heartbeat for a specific agent
 harbor health             # show tenant health summary
 ```
 
+### `harbor update` — Update agent metadata
+
+```bash
+harbor update my-agent --endpoint https://new-endpoint.example.com
+harbor update my-agent --protocol a2a --resource-id "arn:aws:bedrock-agentcore:..."
+harbor update my-agent --desc "Updated description"
+```
+
+### `harbor delete` — Delete an agent
+
+```bash
+harbor delete my-agent
+```
+
+### `harbor deploy-register` — Batch-register from manifest
+
+Register multiple agents at once from a JSON manifest file. Useful for post-CDK-deploy automation.
+
+```bash
+harbor deploy-register manifest.json --publish
+```
+
+The manifest is a JSON array of agent definitions:
+
+```json
+[
+  {
+    "agent_id": "my-agent",
+    "name": "My Agent",
+    "description": "...",
+    "tenant_id": "dev-tenant",
+    "owner": {"owner_id": "dev@harbor.local", "team": "", "org_id": ""},
+    "capabilities": ["nlp"],
+    "runtime": {"provider": "aws", "runtime": "bedrock-agentcore", "resource_id": "arn:..."},
+    "endpoint": {"url": "arn:...", "protocol": "a2a"},
+    "visibility": "org_wide"
+  }
+]
+```
+
 ## Using the API
 
 All endpoints are under `/api/v1`. Full reference: [docs/api-reference.md](api-reference.md).
@@ -166,6 +206,12 @@ cd infrastructure
 npm install
 npx cdk bootstrap   # first time only
 npx cdk deploy
+```
+
+To deploy with an Agent Proxy Lambda (for proxying requests to AgentCore Runtime):
+
+```bash
+npx cdk deploy --context agentRuntimeArn="arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/myAgent-xxxxx"
 ```
 
 CDK outputs after deploy:

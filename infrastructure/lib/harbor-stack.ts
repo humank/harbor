@@ -340,6 +340,40 @@ export class HarborStack extends cdk.Stack {
       targets: [new targets.SnsTopic(alertTopic)],
     });
 
+    // ── Agent Proxy Lambda (streaming to AgentCore Runtime) ──
+
+    const agentProxyFunction = new lambda.Function(this, "AgentProxyFunction", {
+      functionName: "harbor-agent-proxy",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: lambda.Architecture.ARM_64,
+      handler: "agent-proxy.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "lambda")),
+      memorySize: 256,
+      timeout: cdk.Duration.minutes(5),
+      environment: {
+        AGENT_RUNTIME_ARN: config.agentRuntimeArn || "",
+      },
+    });
+
+    // Grant permission to invoke AgentCore Runtime
+    agentProxyFunction.addToRolePolicy(
+      new cdk.aws_iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+        resources: ["*"],
+      }),
+    );
+
+    const proxyIntegration = new apigwv2int.HttpLambdaIntegration(
+      "AgentProxyIntegration",
+      agentProxyFunction,
+    );
+
+    httpApi.addRoutes({
+      path: "/api/v1/agent-proxy",
+      methods: [apigwv2.HttpMethod.POST],
+      integration: proxyIntegration,
+    });
+
     // ── Outputs ────────────────────────────────────────
 
     new cdk.CfnOutput(this, "TableName", { value: table.tableName });

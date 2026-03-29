@@ -1,0 +1,10 @@
+{
+  "classes": {
+    "1": {"name": "第一類", "risk": "low", "description": "內勤人員", "examples": ["工程師", "會計師", "教師", "醫師", "律師", "公務員", "行政人員"]},
+    "2": {"name": "第二類", "risk": "low", "description": "輕度外勤", "examples": ["業務員", "記者", "護理師", "藥劑師", "建築師"]},
+    "3": {"name": "第三類", "risk": "medium", "description": "中度體力勞動", "examples": ["廚師", "水電工", "汽車修護", "倉儲人員"]},
+    "4": {"name": "第四類", "risk": "medium", "description": "重度體力勞動", "examples": ["建築工人", "搬運工", "農夫", "漁夫"]},
+    "5": {"name": "第五類", "risk": "high", "description": "高危險職業", "examples": ["礦工", "高空作業", "爆破人員", "特技演員"]},
+    "6": {"name": "第六類", "risk": "high", "description": "拒保職業", "examples": ["戰地記者", "特種部隊", "試飛員"]}
+  }
+}

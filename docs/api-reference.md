@@ -762,3 +762,99 @@ Service-level health check. No authentication required. Note: this endpoint is a
 ### PolicyMode
 
 `allowlist` | `denylist`
+
+---
+
+## Agent Proxy
+
+### POST /agent-proxy
+
+Proxy a user prompt to an AgentCore Runtime agent via A2A protocol. The Lambda wraps the prompt into an A2A JSON-RPC `message/send` request and forwards it to the configured AgentCore Runtime ARN using `InvokeAgentRuntime`.
+
+**Request body:**
+
+```json
+{
+  "prompt": "我30歲，月預算3000元，想買醫療險",
+  "sessionId": "unique-session-id-at-least-33-chars-long"
+}
+```
+
+**Response:** `200 OK` — A2A JSON-RPC response from the agent.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "result": {
+    "artifacts": [
+      {
+        "artifactId": "...",
+        "name": "agent_response",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Agent's response text here..."
+          }
+        ]
+      }
+    ],
+    "contextId": "...",
+    "history": [...]
+  }
+}
+```
+
+**Error response:**
+
+```json
+{
+  "error": "AgentCore Runtime error: ..."
+}
+```
+
+**Notes:**
+- The `AGENT_RUNTIME_ARN` environment variable on the Lambda determines which AgentCore Runtime to invoke.
+- The Lambda has a 5-minute timeout to accommodate long-running agent interactions.
+- The `sessionId` must be at least 33 characters long (use UUID format).
+
+---
+
+## CLI Commands
+
+The Harbor CLI (`harbor`) provides the following commands:
+
+| Command | Description |
+|---------|-------------|
+| `harbor register <id> <name>` | Register a new agent (starts as draft) |
+| `harbor list` | List agents (tenant-scoped) |
+| `harbor status <id>` | Show agent detail |
+| `harbor lifecycle <id> <target>` | Transition lifecycle state |
+| `harbor discover` | Discover agents by capability or phase |
+| `harbor health [id]` | Show health summary or send heartbeat |
+| `harbor delete <id>` | Delete an agent |
+| `harbor update <id>` | Update agent metadata (endpoint, protocol, resource-id, description) |
+| `harbor deploy-register <manifest>` | Batch-register agents from a JSON manifest file |
+
+### register options
+
+| Option | Description |
+|--------|-------------|
+| `--desc` | Description |
+| `--capabilities` | Comma-separated capabilities |
+| `--phases` | Comma-separated phase affinities |
+| `--provider` | Cloud provider (aws/azure/gcp/on-prem) |
+| `--runtime` | Runtime type (e.g. bedrock-agentcore) |
+| `--region` | Deployment region |
+| `--resource-id` | Resource ARN or URI |
+| `--endpoint` | Agent endpoint URL |
+| `--protocol` | Communication protocol (http/grpc/a2a/mcp) |
+| `--visibility` | Discovery visibility (private/ou_shared/org_wide) |
+
+### deploy-register
+
+Reads a JSON manifest file containing an array of agent definitions and batch-registers them. Use `--publish` to auto-transition to `submitted` after registration.
+
+```bash
+harbor deploy-register manifest.json --publish
+```

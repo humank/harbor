@@ -61,6 +61,13 @@ def cli(ctx: click.Context, url: str, token: str) -> None:
 @click.option("--phases", default="", help="Comma-separated phase affinities")
 @click.option("--tenant", envvar="HARBOR_TENANT", required=True, help="Tenant ID")
 @click.option("--owner", envvar="HARBOR_OWNER", required=True, help="Owner ID")
+@click.option("--provider", type=click.Choice(["aws", "azure", "gcp", "on-prem"]), default=None, help="Cloud provider")
+@click.option("--runtime", default="", help="Runtime type (e.g. bedrock-agentcore)")
+@click.option("--region", default="", help="Deployment region")
+@click.option("--resource-id", default="", help="Resource ARN or URI")
+@click.option("--endpoint", default="", help="Agent endpoint URL")
+@click.option("--protocol", type=click.Choice(["http", "grpc", "a2a", "mcp"]), default=None, help="Communication protocol")
+@click.option("--visibility", type=click.Choice(["private", "ou_shared", "org_wide"]), default=None, help="Discovery visibility")
 @click.pass_context
 def register(
     ctx: click.Context,
@@ -71,10 +78,17 @@ def register(
     phases: str,
     tenant: str,
     owner: str,
+    provider: str | None,
+    runtime: str,
+    region: str,
+    resource_id: str,
+    endpoint: str,
+    protocol: str | None,
+    visibility: str | None,
 ) -> None:
     """Register a new agent (starts as draft)."""
     client: HarborClient = ctx.obj["client"]
-    body = {
+    body: dict[str, Any] = {
         "agent_id": agent_id,
         "name": name,
         "description": desc,
@@ -83,6 +97,24 @@ def register(
         "capabilities": [c.strip() for c in capabilities.split(",") if c.strip()],
         "phase_affinity": [p.strip() for p in phases.split(",") if p.strip()],
     }
+    if provider or runtime or region or resource_id:
+        body["runtime"] = {}
+        if provider:
+            body["runtime"]["provider"] = provider
+        if runtime:
+            body["runtime"]["runtime"] = runtime
+        if region:
+            body["runtime"]["region"] = region
+        if resource_id:
+            body["runtime"]["resource_id"] = resource_id
+    if endpoint or protocol:
+        body["endpoint"] = {}
+        if endpoint:
+            body["endpoint"]["url"] = endpoint
+        if protocol:
+            body["endpoint"]["protocol"] = protocol
+    if visibility:
+        body["visibility"] = visibility
     result = client.post("/agents", body)
     click.secho(
         f"✓ Registered {result['agent_id']} (lifecycle: {result['lifecycle_status']})", fg="green"
@@ -233,6 +265,99 @@ def health(ctx: click.Context, agent_id: str | None) -> None:
             color = {"healthy": "green", "unhealthy": "red"}.get(k, "white")
             click.echo(f"  {k:<12} ", nl=False)
             click.secho(str(v), fg=color)
+
+
+
+# ── deploy-register ───────────────────────────────────────
+
+
+@cli.command("deploy-register")
+@click.argument("manifest", type=click.Path(exists=True))
+@click.option("--publish", is_flag=True, help="Auto-transition to submitted after register")
+@click.pass_context
+def deploy_register(ctx: click.Context, manifest: str, publish: bool) -> None:
+    """Batch-register agents from a JSON manifest file.
+
+    The manifest is a JSON array of agent definitions:
+
+    \b
+    [
+      {
+        "agent_id": "product-catalog-agent",
+        "name": "商品目錄 Agent",
+        "description": "...",
+        "capabilities": ["product_search"],
+        "runtime": {"provider": "aws", "runtime": "bedrock-agentcore", "resource_id": "arn:..."},
+        "endpoint": {"url": "arn:...", "protocol": "a2a"},
+        "visibility": "org_wide"
+      }
+    ]
+
+    Use with CDK: pipe cdk outputs into a script that generates the manifest,
+    then run `harbor deploy-register manifest.json --publish`.
+    """
+    import json as _json
+
+    client: HarborClient = ctx.obj["client"]
+    with open(manifest) as f:
+        agents = _json.load(f)
+
+    for agent in agents:
+        agent_id = agent["agent_id"]
+        # Try delete first (idempotent re-register)
+        try:
+            httpx.request(
+                "DELETE",
+                f"{client.base}/agents/{agent_id}",
+                headers=client.headers,
+                timeout=10,
+            )
+        except Exception:
+            pass
+
+        result = client.post("/agents", agent)
+        click.secho(f"✓ Registered {agent_id}", fg="green")
+
+        if publish:
+            try:
+                client.put(f"/agents/{agent_id}/lifecycle?target=submitted")
+                click.echo(f"  → submitted")
+            except SystemExit:
+                click.secho(f"  → lifecycle transition failed", fg="yellow")
+
+    click.secho(f"\n✓ {len(agents)} agents registered.", fg="green", bold=True)
+
+
+# ── update ────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("agent_id")
+@click.option("--endpoint", default=None, help="Update endpoint URL")
+@click.option("--protocol", default=None, help="Update protocol")
+@click.option("--resource-id", default=None, help="Update runtime resource ID (ARN)")
+@click.option("--desc", default=None, help="Update description")
+@click.pass_context
+def update(ctx: click.Context, agent_id: str, endpoint: str | None,
+           protocol: str | None, resource_id: str | None, desc: str | None) -> None:
+    """Update an existing agent's metadata."""
+    client: HarborClient = ctx.obj["client"]
+    body: dict[str, Any] = {}
+    if desc is not None:
+        body["description"] = desc
+    if endpoint or protocol:
+        body["endpoint"] = {}
+        if endpoint:
+            body["endpoint"]["url"] = endpoint
+        if protocol:
+            body["endpoint"]["protocol"] = protocol
+    if resource_id:
+        body["runtime"] = {"resource_id": resource_id}
+    if not body:
+        click.echo("Nothing to update. Use --endpoint, --protocol, --resource-id, or --desc.")
+        return
+    result = client._request("PATCH", f"/agents/{agent_id}", json=body)
+    click.secho(f"✓ Updated {agent_id}", fg="green")
 
 
 def main() -> None:

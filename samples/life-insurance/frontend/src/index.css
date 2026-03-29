@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #F59E0B;
+  --color-primary-light: #FBBF24;
+  --color-cta: #8B5CF6;
+  --color-cta-hover: #7C3AED;
+  --color-bg: #0F172A;
+  --color-bg-card: #1E293B;
+  --color-bg-input: #334155;
+  --color-text: #F8FAFC;
+  --color-text-muted: #94A3B8;
+  --color-border: #475569;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+}
