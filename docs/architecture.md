@@ -70,9 +70,9 @@ graph TB
 | **CloudFront** | CDN for React SPA and API reverse proxy. HTTPS-only, TLS 1.2+. |
 | **WAF** | AWS Managed CommonRuleSet + rate limiting (1000 req/5 min/IP). |
 | **S3** | Static hosting for the React SPA. No public access — OAC only. |
-| **API Gateway (HTTP API)** | Routes `/api/*` to Lambda. Throttled at 100 req/s burst, 50 sustained. |
-| **Lambda** | Python 3.12 on ARM64 (Graviton). FastAPI app wrapped by Mangum. 256 MB, 30s timeout. |
-| **Agent Proxy Lambda** | Python 3.12 on ARM64. Proxies requests to AgentCore Runtime via `InvokeAgentRuntime` API. Wraps user prompts into A2A JSON-RPC `message/send` format. 256 MB, 5 min timeout. Route: `POST /api/v1/agent-proxy`. |
+| **API Gateway (REST API)** | Unified gateway for control plane and data plane. Routes `/api/*` to Lambda (Mangum). Routes `/stream/*` to streaming Lambda. Supports response streaming via `responseTransferMode: STREAM`. Throttled at 100 req/s burst, 50 sustained. |
+| **Lambda (Control Plane)** | Python 3.12 on ARM64 (Graviton). FastAPI app wrapped by Mangum. 256 MB, 30s timeout. Handles all Harbor API endpoints. |
+| **Lambda (Data Plane)** | Python 3.12 custom runtime on ARM64 (Docker image). Streams SSE responses from AgentCore Runtime via `InvokeAgentRuntime`. 512 MB, 5 min timeout. Route: `POST /stream/agent-proxy`. |
 | **DynamoDB** | Single-table, PAY_PER_REQUEST, point-in-time recovery enabled. |
 | **Cognito** | User pool with JWT issuance. Federated with IAM Identity Center for SSO. |
 | **EventBridge** | `harbor-events` bus for lifecycle events, policy violations, cross-account routing. |

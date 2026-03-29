@@ -26,6 +26,9 @@ Every change must be evaluated against the full system, not just the local compo
 - Before adding a new dependency, ask: does this violate the layered architecture (API → Service → Store)?
 - Before changing a data model, ask: what downstream consumers will break?
 - Before choosing a protocol or port, ask: what does the target runtime actually require? Check the documentation, don't assume.
+- Before mixing traffic types, ask: does this endpoint have fundamentally different characteristics (latency, streaming, timeout) than existing ones? If so, it belongs on a separate path with its own integration.
+
+Harbor separates **control plane** (`/api/*` — short-lived, request-response) from **data plane** (`/stream/*` — long-lived, streaming). They share one REST API Gateway but use different Lambda integrations and different CloudFront behaviors.
 
 **Local optimizations that break global invariants are bugs, not features.**
 

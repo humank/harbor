@@ -767,9 +767,11 @@ Service-level health check. No authentication required. Note: this endpoint is a
 
 ## Agent Proxy
 
-### POST /agent-proxy
+### POST /stream/agent-proxy
 
-Proxy a user prompt to an AgentCore Runtime agent via A2A protocol. The Lambda wraps the prompt into an A2A JSON-RPC `message/send` request and forwards it to the configured AgentCore Runtime ARN using `InvokeAgentRuntime`.
+Proxy a user prompt to an AgentCore Runtime agent via A2A protocol with SSE streaming. The Lambda wraps the prompt into an A2A JSON-RPC `message/send` request, invokes AgentCore Runtime, and streams the response back as Server-Sent Events.
+
+This endpoint is on the `/stream/` path (not `/api/`) because it uses REST API response streaming (`responseTransferMode: STREAM`) with a Python custom runtime Lambda.
 
 **Request body:**
 
@@ -780,30 +782,18 @@ Proxy a user prompt to an AgentCore Runtime agent via A2A protocol. The Lambda w
 }
 ```
 
-**Response:** `200 OK` — A2A JSON-RPC response from the agent.
+**Response:** `200 OK` — SSE stream (`Content-Type: text/event-stream`).
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-001",
-  "result": {
-    "artifacts": [
-      {
-        "artifactId": "...",
-        "name": "agent_response",
-        "parts": [
-          {
-            "kind": "text",
-            "text": "Agent's response text here..."
-          }
-        ]
-      }
-    ],
-    "contextId": "...",
-    "history": [...]
-  }
-}
 ```
+data: {"jsonrpc":"2.0","id":"...","result":{"artifacts":[{"parts":[{"kind":"text","text":"Agent response..."}]}],"contextId":"..."}}
+
+data: [DONE]
+```
+
+Each `data:` line contains either:
+- A complete A2A JSON-RPC response (when AgentCore returns JSON)
+- A streaming chunk (when AgentCore returns SSE)
+- `[DONE]` to signal end of stream
 
 **Error response:**
 
